@@ -1,0 +1,315 @@
+from datetime import timedelta 
+class OpeningRangeBreakout(QCAlgorithm):
+    
+    
+    def Initialize(self):
+        
+        # look for https://www.quantconnect.com/docs/algorithm-reference/historical-data#Historical-Data-Key-History-Concepts 
+        # the above is to find PM low via pandas dataframes by history instead of streaming 
+  
+        # can also be converted into a dict
+        self.equities = {'ALT':Stock('ALT')}
+        #self.equities = {"NIO":Stock('NIO'), "SRNE":Stock('SRNE'), "PLUG":Stock('PLUG'), "NETE":Stock('NETE'), "TSLA":Stock('TSLA'), "CBAT":Stock('CBAT'), "GME":Stock("GME")
+        #                , "SPI":Stock("SPI"), "ABIO":Stock("ABIO"), "SGBX":Stock("SGBX"), "POLA":Stock("POLA"), "AIM":Stock("AIM"), "GNUS":Stock("GNUS")
+        #                , "ALT": Stock("ALT"), "NCTY":Stock("NCTY"), "FLDM":Stock("FLDM")}
+        
+        
+        self.counter = 0
+
+        self.isPrintTrue = False # irrelevant
+        
+        # investing 1000 dollars for each stock 
+        self.cashToInvestPerStock = 1000
+            
+        self.SetStartDate(2020, 11, 23)  
+        self.SetEndDate(2020, 11, 24)  
+        self.SetCash(25000)
+        self.UniverseSettings.ExtendedMarketHours = True
+        
+        for stockName in self.equities:
+            
+            # stockName and self.equities[stockName].symbol are the same stock's name/symbol
+            self.AddEquity(stockName, Resolution.Second, Market.USA, True, 0, True)
+            
+            # zero transaction fees 
+            self.Securities[stockName].FeeModel = ConstantFeeModel(0)
+            
+            # to be used in investigating whether the buy order has been filled
+            self.lastOrderEvent = None 
+            
+            # define our 1 minute trade bar consolidator. we can
+            # access the 1 minute bar from the DataConsolidated events
+            minuteConsolidator = TradeBarConsolidator(timedelta(minutes=1))
+    
+            # attach our event handler. the event handler is a function that will
+            # be called each time we produce a new consolidated piece of data.
+            minuteConsolidator.DataConsolidated += self.OnMinuteCandle
+    
+            # this call adds our 1 minute consolidator to
+            # the manager to receive updates from the engine
+            self.SubscriptionManager.AddConsolidator(stockName, minuteConsolidator)
+        
+        
+    def OnData(self, data):
+        '''
+        function description: Any trading code in here will be at the "second" level (time is in seconds)
+        '''
+        for stockName in self.equities:
+            
+            # stock is the Stock object 
+            stock = self.equities[str(stockName)]
+            # if it is the start of a new day, reset variables in the stock 
+            if self.Time.hour == 4 and self.Time.minute == 0 and self.Time.second == 1:
+                self.resetVariables(stock)
+            
+            # if it's time to buy 
+            if stock.triggerBuyDecisionMinute and self.Time < (stock.postBuyDecisionMinute): 
+
+                # send the buy order if you haven't already
+                if stock.isBuyOrderSent == False: 
+                    stock.buyTicket = self.LimitOrder(stock.symbol, stock.size, stock.buyPrice) 
+                    stock.isBuyOrderSent = True
+                    self.Debug(str(stock.postBuyDecisionMinute))
+                    self.Debug("The above is the post buy decision minute")
+                        
+            # if the buy order has been sent and not filled, and it's past the 
+            # buy decision minute already, cancel 
+            elif stock.isBuyOrderSent and stock.isBuyOrderFilled == False and self.Time >= (stock.postBuyDecisionMinute) and stock.isBuyOrderCancelled == False:
+                cancelBuyOrder = stock.buyTicket.Cancel()
+                stock.isBuyOrderCancelled = True
+                self.Debug("curious")
+
+            
+            # if the buy order is already filled (in this casse the sell for 
+            # win order is already sent, trigger sell() method
+            else:
+                if stock.isBuyOrderFilled:
+                    self.sell(stock)        
+            
+    def sell(self, stock):
+        ''' 
+        function description: adjusts the sell order according to the price
+        '''
+ 
+        # check if the stock has already been sold
+        if self.isStockSold(stock):
+            
+            # then reset all variables 
+            self.resetVariables(stock)
+        
+        # since the stock has not yet been sold ... 
+        else:    
+            # if the price has dipped more than or equal to 6%, prep the sellForLoss order
+            if (self.Securities[stock.symbol].Close - stock.buyPrice)/stock.buyPrice <= -0.06 and stock.isSellForLossOrderSent == False:
+                
+                # cancel the sell for win order, since that is already sent
+                cancelSellForWinOrder = stock.sellForWinTicket.Cancel()
+                stock.isSellForWinOrderSent = False
+                
+                # send the sell for loss order
+                stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, "LOSS")
+                stock.isSellForLossOrderSent = True
+                
+                    
+            # else, the price is not low enough to warrant sending a sell for loss order
+            # i can prep the sellForWin order here
+            else:
+                
+                # if the sell for loss order has been sent already, cancel the 
+                # sell for loss order first 
+                if stock.isSellForLossOrderSent:
+                    cancelSellForLossOrder = stock.sellForLossTicket.Cancel()
+                    stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, "WIN")
+                    stock.isSellForLossOrderSent = False
+                    stock.sellForWinOrderSent = True 
+                    
+                # otherwise just send the sell for win ticket    
+                elif stock.isSellForWinOrderSent == False:
+                    stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, "WIN")
+                    stock.isSellForWinOrderSent = True
+                
+                
+    
+    def OnMinuteCandle(self, sender, bar):
+        '''
+        function description: any trading code in here will be at the minute level
+        '''
+        
+        # stock is the Stock object
+        stock = self.equities[str(bar.Symbol)]
+        self.printMinuteCandleOHLC(bar)
+        # decide to open the market for the stock or not
+        self.decideIfMarketShouldBeSetOpen(stock)
+        
+        if stock.isMarketOpen == False: 
+            self.getPremarketLow(bar, stock)
+          
+        elif stock.isMarketOpen:
+            self.findPreTradingConditions(bar, stock)
+            
+    
+    def getPremarketLow(self, bar, stock):
+        if bar.Low < stock.premarketLow:
+            stock.premarketLow = bar.Low
+            
+            
+    def decideIfMarketShouldBeSetOpen(self, stock):
+        '''
+        function description: decides if the stock.isMarketOpen should be set to true
+        stock.isMarketOpen will not be set to true if it is a multiple day play.
+        market will only be considered open from 9.31 onwards, since in the OnMinuteCandle function, we want to start
+        reading only from the 9.30 candle onwards.
+        '''
+        if (self.Time.hour == 9 and self.Time.minute == 31):
+            if stock.isMultipleDayPlay == False:
+                stock.isMarketOpen = True
+
+   
+    def findPreTradingConditions(self, bar, stock):
+        ''' 
+        function description: finds the conditions necessary to execute the trading process
+        '''
+        
+        # Finds when the premarketLow has been broken.
+        if bar.Low < stock.premarketLow and stock.isAfterPremarketLowCracked == False:
+            stock.isAfterPremarketLowCracked = True
+            stock.premarketCrackedTime = self.Time - timedelta(minutes = 1)
+        
+        # if there is a redsprout, set the trading variables
+        elif stock.isAfterPremarketLowCracked and stock.isAfterRedSprout == False:
+            if bar.High > stock.premarketLow:
+                if bar.Close < bar.Open:
+                    self.setTradingVariables(bar, stock)
+                    
+    
+    def setTradingVariables(self, bar, stock):
+        ''' 
+        function description: sets variables relevant to the buy decision minute
+        and activates the OnData function.
+        '''
+        stock.buyPrice = bar.Low
+        stock.sellForWinPrice = bar.High
+        stock.sellForLossPrice = stock.buyPrice * 0.94
+        stock.isAfterRedSprout = True
+        stock.buyDecisionMinute = self.Time  
+        stock.postBuyDecisionMinute = self.Time + timedelta(minutes = 1)
+        stock.triggerBuyDecisionMinute = True  
+        
+        # decide the size
+        stock.size = int(self.cashToInvestPerStock/stock.buyPrice)
+    
+    
+    def isStockSold(self, stock):
+        '''
+        function descriptions: checks if the stock has been successfully sold
+        '''
+        
+        if stock.isBuyOrderFilled and self.Portfolio[stock.symbol].Invested == False:
+            return True 
+ 
+     
+    def OnOrderEvent(self, orderEvent):
+        '''
+        function description: finds whether the buy order is filled 
+        '''
+        for stockName in self.equities:
+            
+            # stock is the Stock object
+            stock = self.equities[stockName]
+            
+            # check if the stock exists in the portfolio, that means it has been bought already
+            if self.Portfolio[stock.symbol].Invested:
+                self.lastOrderEvent = orderEvent
+                stock.isBuyOrderFilled = True
+
+            
+    def printMinuteCandleOHLC(self, bar):
+        '''
+        function description: prints out the Open High Low and Close for a candle at a specified time 
+        in bar.Time.hour and bar.Time.minute below give the EXACT hour and minute for the
+        minute candle you wish to investigate.
+        '''
+        if bar.Time.hour == 15 and bar.Time.minute == 46:
+            self.Debug(bar.Open)
+            self.Debug("Above is the Open")
+            self.Debug(bar.High)
+            self.Debug("Above is the High")
+            self.Debug(bar.Low)
+            self.Debug("Above is the Low")
+            self.Debug(bar.Close)
+            self.Debug("Above is the Close")
+ 
+    def askIsMultipleDayPlay(self, stock):
+        '''
+        function description: if the stock is not sold on the first day, this function
+        ensures some variables are not reset, allowing the stock to be held over the following days,
+        via the isMultipleDayPlay boolean flag
+        ''' 
+      
+        if self.Portfolio[stock.symbol].Invested:
+            stock.isMultipleDayPlay = True
+        else:
+            stock.isMultipleDayPlay = False
+            
+    def resetVariables(self, stock):
+        '''
+        function description: resets all variables of the stock object if it is the end of the day
+        if it is a multiple day play, no variables are reset
+        '''
+        self.askIsMultipleDayPlay(stock)
+        if stock.isMultipleDayPlay == False:
+            stock.isMarketOpen = False
+            stock.premarketLow = 300000
+            stock.premarketCrackedTime = None
+            stock.isAfterPremarketLowCracked = False 
+            stock.isAfterRedSprout = False
+            stock.buyPrice = 0
+            stock.sellForWinPrice = 0 
+            stock.sellForLossPrice = 0 # irrelevant 
+            stock.buyDecisionMinute = None
+            stock.buyTicket = None
+            stock.sellForWinTicket = None
+            stock.sellForLossTicket = None
+            stock.isBuyOrderSent = False
+            stock.isBuyOrderFilled = False
+            stock.isAnySellOrderSent = False
+            stock.isSellForWinOrderSent = False
+            stock.isSellForLossOrderSent = False
+            stock.triggerBuyDecisionMinute = False
+            stock.size = 0
+            stock.isBuyOrderCancelled = False
+        else:
+            self.Debug(str(self.Time))
+            self.Debug("This is a Multiple Day Play, none of the stock object variables are being reset")  
+    
+    
+
+class Stock:
+    def __init__(self,symbol):
+        self.symbol = symbol
+        self.isMarketOpen = False
+        self.premarketLow = 300000
+        self.premarketCrackedTime = None
+        self.isAfterPremarketLowCracked = False 
+        self.isAfterRedSprout = False
+        self.buyPrice = 0
+        self.sellForWinPrice = 0 
+        self.sellForLossPrice = 0 # irrelevant 
+        self.buyDecisionMinute = None
+        self.postBuyDecisionMinute = None
+        self.buyTicket = None
+        self.sellForWinTicket = None
+        self.sellForLossTicket = None
+        self.isBuyOrderSent = False
+        self.isBuyOrderFilled = False
+        self.isAnySellOrderSent = False
+        self.isSellForWinOrderSent = False
+        self.isSellForLossOrderSent = False
+        self.ishelp = False
+        self.size = 0
+        self.triggerBuyDecisionMinute = False
+        self.isBuyOrderCancelled = False
+        
+        # used to decide if the play should extend over multiple days 
+        self.isMultipleDayPlay = False
+        # end of variables setting
