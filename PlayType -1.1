@@ -8,7 +8,7 @@ class OpeningRangeBreakout(QCAlgorithm):
         # the above is to find PM low via pandas dataframes by history instead of streaming 
   
         # can also be converted into a dict
-        self.equities = {'ALT':Stock('ALT')}
+        self.equities = {'SRNE':Stock('SRNE')}
         #self.equities = {"NIO":Stock('NIO'), "SRNE":Stock('SRNE'), "PLUG":Stock('PLUG'), "NETE":Stock('NETE'), "TSLA":Stock('TSLA'), "CBAT":Stock('CBAT'), "GME":Stock("GME")
         #                , "SPI":Stock("SPI"), "ABIO":Stock("ABIO"), "SGBX":Stock("SGBX"), "POLA":Stock("POLA"), "AIM":Stock("AIM"), "GNUS":Stock("GNUS")
         #                , "ALT": Stock("ALT"), "NCTY":Stock("NCTY"), "FLDM":Stock("FLDM")}
@@ -21,8 +21,8 @@ class OpeningRangeBreakout(QCAlgorithm):
         # investing 1000 dollars for each stock 
         self.cashToInvestPerStock = 1000
             
-        self.SetStartDate(2020, 11, 23)  
-        self.SetEndDate(2020, 11, 24)  
+        self.SetStartDate(2020, 12, 1)  
+        self.SetEndDate(2020, 12, 2)  
         self.SetCash(25000)
         self.UniverseSettings.ExtendedMarketHours = True
         
@@ -69,8 +69,15 @@ class OpeningRangeBreakout(QCAlgorithm):
                 if stock.isBuyOrderSent == False: 
                     stock.buyTicket = self.LimitOrder(stock.symbol, stock.size, stock.buyPrice) 
                     stock.isBuyOrderSent = True
+                    self.Debug(stock.premarketLow)
+                    self.Debug("The above is the stock premarket low")
                     self.Debug(str(stock.postBuyDecisionMinute))
                     self.Debug("The above is the post buy decision minute")
+                
+                # if the buy order is already filled and it's still buy 
+                # decision minute, still can trigger sell() method
+                elif stock.isBuyOrderFilled:
+                    self.sell(stock)
                         
             # if the buy order has been sent and not filled, and it's past the 
             # buy decision minute already, cancel 
@@ -80,8 +87,7 @@ class OpeningRangeBreakout(QCAlgorithm):
                 self.Debug("curious")
 
             
-            # if the buy order is already filled (in this casse the sell for 
-            # win order is already sent, trigger sell() method
+            # if the buy order is already filled, trigger sell() method
             else:
                 if stock.isBuyOrderFilled:
                     self.sell(stock)        
@@ -98,33 +104,42 @@ class OpeningRangeBreakout(QCAlgorithm):
             self.resetVariables(stock)
         
         # since the stock has not yet been sold ... 
-        else:    
+        else:
+            
             # if the price has dipped more than or equal to 6%, prep the sellForLoss order
-            if (self.Securities[stock.symbol].Close - stock.buyPrice)/stock.buyPrice <= -0.06 and stock.isSellForLossOrderSent == False:
+            if (self.Securities[stock.symbol].Close - stock.buyPrice)/stock.buyPrice <= -0.06:
                 
-                # cancel the sell for win order, since that is already sent
-                cancelSellForWinOrder = stock.sellForWinTicket.Cancel()
-                stock.isSellForWinOrderSent = False
+                self.Debug("Price in DANGER range")
                 
-                # send the sell for loss order
-                stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, "LOSS")
-                stock.isSellForLossOrderSent = True
+         
+                if stock.isSellForWinOrderSent and stock.isSellForLossOrderSent == False:
+                    cancelSellForWinOrder = stock.sellForWinTicket.Cancel()
+
+                    # send the sell for loss order
+                    stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, "LOSS")
+                    stock.isSellForLossOrderSent = True
+                    stock.isSellForWinOrderSent = False
+      
+                elif stock.isSellForWinOrderSent == False and stock.isSellForLossOrderSent == False:
+                    stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, "LOSS")
+                    stock.isSellForLossOrderSent = True
                 
-                    
             # else, the price is not low enough to warrant sending a sell for loss order
             # i can prep the sellForWin order here
             else:
                 
+                self.Debug("Price in alright range")
+                
                 # if the sell for loss order has been sent already, cancel the 
                 # sell for loss order first 
-                if stock.isSellForLossOrderSent:
+                if stock.isSellForLossOrderSent and stock.isSellForWinOrderSent == False:
                     cancelSellForLossOrder = stock.sellForLossTicket.Cancel()
                     stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, "WIN")
                     stock.isSellForLossOrderSent = False
                     stock.sellForWinOrderSent = True 
                     
-                # otherwise just send the sell for win ticket    
-                elif stock.isSellForWinOrderSent == False:
+                # elif just send the sell for win, if it hasn't been sent already    
+                elif stock.isSellForLossOrderSent == False and stock.isSellForWinOrderSent == False:
                     stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, "WIN")
                     stock.isSellForWinOrderSent = True
                 
@@ -188,7 +203,11 @@ class OpeningRangeBreakout(QCAlgorithm):
         and activates the OnData function.
         '''
         stock.buyPrice = bar.Low
+        self.Debug(stock.buyPrice)
+        self.Debug("The above is the buyprice for the stock")
         stock.sellForWinPrice = bar.High
+        self.Debug(stock.premarketCrackedTime)
+        self.Debug("The above is the time the PM low was cracked")
         stock.sellForLossPrice = stock.buyPrice * 0.94
         stock.isAfterRedSprout = True
         stock.buyDecisionMinute = self.Time  
@@ -229,7 +248,7 @@ class OpeningRangeBreakout(QCAlgorithm):
         in bar.Time.hour and bar.Time.minute below give the EXACT hour and minute for the
         minute candle you wish to investigate.
         '''
-        if bar.Time.hour == 15 and bar.Time.minute == 46:
+        if bar.Time.hour == 9 and bar.Time.minute == 39:
             self.Debug(bar.Open)
             self.Debug("Above is the Open")
             self.Debug(bar.High)
@@ -278,6 +297,7 @@ class OpeningRangeBreakout(QCAlgorithm):
             stock.triggerBuyDecisionMinute = False
             stock.size = 0
             stock.isBuyOrderCancelled = False
+            self.Debug("All the stock variables are being reset")
         else:
             self.Debug(str(self.Time))
             self.Debug("This is a Multiple Day Play, none of the stock object variables are being reset")  
