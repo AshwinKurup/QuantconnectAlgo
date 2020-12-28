@@ -11,15 +11,38 @@ class OpeningRangeBreakout(QCAlgorithm):
 
         #self.equities = {'SPI':Stock('SPI')}
         self.equities = {"NIO":Stock('NIO'), "SRNE":Stock('SRNE'), "PLUG":Stock('PLUG'), "NETE":Stock('NETE'), "TSLA":Stock('TSLA'), "CBAT":Stock('CBAT'), "GME":Stock("GME")
+        
                         , "SPI":Stock("SPI"), "ABIO":Stock("ABIO"), "SGBX":Stock("SGBX"), "POLA":Stock("POLA"), "AIM":Stock("AIM"), "GNUS":Stock("GNUS")
-                        , "ALT": Stock("ALT"), "NCTY":Stock("NCTY"), "FLDM":Stock("FLDM")}
-        
-        
-
-        
+                        
+                        , "ALT": Stock("ALT"), "NCTY":Stock("NCTY"), "FLDM":Stock("FLDM"), "TTNP":Stock("TTNP"), "ACET":Stock("ACET")
+                    
+                        , "LUB": Stock("LUB"), "NURO":Stock("NURO"), "AMPE":Stock("AMPE"), "PEIX":Stock("PEIX"), "OMI":Stock("OMI")
+                        
+                        ,"RMTI": Stock("RMTI"), "TATT":Stock("TATT"), "SYPR":Stock("SYPR"), "AAPL":Stock("AAPL"), "SPY":Stock("SPY")
+                        
+                        , "PPSI": Stock("PPSI"), "CRMD":Stock("CRMD"), "ONTX":Stock("ONTX"), "PLL":Stock("PLL"), "KNOS":Stock("KNOS") 
+                        
+                        ,"LLLI": Stock("LLLI"), "NWBO":Stock("NWBO"), "HYSR":Stock("HYSR"), "JRJC":Stock("JRJC"), "GAXY":Stock("GAXY")
+                        
+                        , "SCON": Stock("SCON"), "BDR":Stock("BDR"), "GIGA":Stock("GIGA"), "CUB":Stock("CUB"), "FB":Stock("FB")
+                        
+                        , "LOGC": Stock("LOGC"), "PENN":Stock("PENN"), "MOV":Stock("MOV"), "CLNY":Stock("CLNY"), "NTN":Stock("NTN") 
+                        
+                        ,"ALYI": Stock("ALYI"), "CREG":Stock("CREG"), "ATHX":Stock("ATHX"), "ADXS":Stock("ADXS"), "SSP":Stock("SSP")
+                        
+                        , "CPSH": Stock("CPSH"), "DSGT":Stock("DSGT"), "SOL":Stock("SOL"), "KLDO":Stock("KLDO"), "CAN":Stock("CAN")
+                        
+                        ,"MNOV": Stock("MNOV"), "BBI":Stock("BBI"), "NKE":Stock("NKE"), "PIC":Stock("PIC"), "SUNW":Stock("SUNW")
+                        
+                        , "CRYO": Stock("CRYO"), "JE":Stock("JE"), "VRUS":Stock("VRUS"), "OPTT":Stock("OPTT"), "GME":Stock("GME"), "KTOS":Stock("KTOS")
+        }
         
         self.counter = 0
         
+        # switches for the mods
+        self.enableLowVolumeMod = False
+        self.enableFallingKnifeMod = True
+
         # holds the start time of the current market day. 
         self.currentMarketStartTime = None
         
@@ -32,7 +55,7 @@ class OpeningRangeBreakout(QCAlgorithm):
             
         self.SetStartDate(2020, 12, 1)  
         self.SetEndDate(2020, 12, 25)  
-        self.SetCash(25000)
+        self.SetCash(200000)
         self.UniverseSettings.ExtendedMarketHours = True
         
         for stockName in self.equities:
@@ -152,7 +175,7 @@ class OpeningRangeBreakout(QCAlgorithm):
         function description: if the stock falls >=0.6% before I even start trading when the 
         market is open, returns True
         '''
-        if stock.triggerBuyDecisionMinute == False and stock.isMarketOpen:
+        if stock.triggerBuyDecisionMinute == False and stock.isMarketOpen and self.enableFallingKnifeMod:
             if self.Securities[stock.symbol].High > stock.maxPriceBeforeTrading :
                 stock.maxPriceBeforeTrading = self.Securities[stock.symbol].High
             
@@ -170,7 +193,7 @@ class OpeningRangeBreakout(QCAlgorithm):
         function description: returns True if the average volume 
         of the stock before I trade it is < 5000
         '''
-        if stock.triggerBuyDecisionMinute == False and stock.isMarketOpen:
+        if stock.triggerBuyDecisionMinute == False and stock.isMarketOpen and self.enableLowVolumeMod:
             stock.totalVolumeBeforeTrading = stock.totalVolumeBeforeTrading + bar.Volume
             numberMinutesElapsed = (self.Time - self.currentMarketStartTime).total_seconds()/60
             
