@@ -10,9 +10,9 @@ class OpeningRangeBreakout(QCAlgorithm):
         # can also be converted into a dict
 
         #self.equities = {'SPI':Stock('SPI')}
-        #self.equities = {"NIO":Stock('NIO'), "SRNE":Stock('SRNE'), "PLUG":Stock('PLUG'), "NETE":Stock('NETE'), "TSLA":Stock('TSLA'), "CBAT":Stock('CBAT'), "GME":Stock("GME")
-        #                , "SPI":Stock("SPI"), "ABIO":Stock("ABIO"), "SGBX":Stock("SGBX"), "POLA":Stock("POLA"), "AIM":Stock("AIM"), "GNUS":Stock("GNUS")
-        #                , "ALT": Stock("ALT"), "NCTY":Stock("NCTY"), "FLDM":Stock("FLDM")}
+        self.equities = {"NIO":Stock('NIO'), "SRNE":Stock('SRNE'), "PLUG":Stock('PLUG'), "NETE":Stock('NETE'), "TSLA":Stock('TSLA'), "CBAT":Stock('CBAT'), "GME":Stock("GME")
+                        , "SPI":Stock("SPI"), "ABIO":Stock("ABIO"), "SGBX":Stock("SGBX"), "POLA":Stock("POLA"), "AIM":Stock("AIM"), "GNUS":Stock("GNUS")
+                        , "ALT": Stock("ALT"), "NCTY":Stock("NCTY"), "FLDM":Stock("FLDM")}
         
         
 
@@ -166,6 +166,10 @@ class OpeningRangeBreakout(QCAlgorithm):
                 return False
         
     def isLowVolume(self, bar, stock):
+        '''
+        function description: returns True if the average volume 
+        of the stock before I trade it is < 5000
+        '''
         if stock.triggerBuyDecisionMinute == False and stock.isMarketOpen:
             stock.totalVolumeBeforeTrading = stock.totalVolumeBeforeTrading + bar.Volume
             numberMinutesElapsed = (self.Time - self.currentMarketStartTime).total_seconds()/60
