@@ -10,12 +10,18 @@ class OpeningRangeBreakout(QCAlgorithm):
         # can also be converted into a dict
 
         #self.equities = {'SPI':Stock('SPI')}
-        self.equities = {"NIO":Stock('NIO'), "SRNE":Stock('SRNE'), "PLUG":Stock('PLUG'), "NETE":Stock('NETE'), "TSLA":Stock('TSLA'), "CBAT":Stock('CBAT'), "GME":Stock("GME")
-                        , "SPI":Stock("SPI"), "ABIO":Stock("ABIO"), "SGBX":Stock("SGBX"), "POLA":Stock("POLA"), "AIM":Stock("AIM"), "GNUS":Stock("GNUS")
-                        , "ALT": Stock("ALT"), "NCTY":Stock("NCTY"), "FLDM":Stock("FLDM")}
+        #self.equities = {"NIO":Stock('NIO'), "SRNE":Stock('SRNE'), "PLUG":Stock('PLUG'), "NETE":Stock('NETE'), "TSLA":Stock('TSLA'), "CBAT":Stock('CBAT'), "GME":Stock("GME")
+        #                , "SPI":Stock("SPI"), "ABIO":Stock("ABIO"), "SGBX":Stock("SGBX"), "POLA":Stock("POLA"), "AIM":Stock("AIM"), "GNUS":Stock("GNUS")
+        #                , "ALT": Stock("ALT"), "NCTY":Stock("NCTY"), "FLDM":Stock("FLDM")}
+        
+        
+
         
         
         self.counter = 0
+        
+        # holds the start time of the current market day. 
+        self.currentMarketStartTime = None
         
         self.MAX_RISK = 0.06
 
@@ -159,6 +165,16 @@ class OpeningRangeBreakout(QCAlgorithm):
             else:
                 return False
         
+    def isLowVolume(self, bar, stock):
+        if stock.triggerBuyDecisionMinute == False and stock.isMarketOpen:
+            stock.totalVolumeBeforeTrading = stock.totalVolumeBeforeTrading + bar.Volume
+            numberMinutesElapsed = (self.Time - self.currentMarketStartTime).total_seconds()/60
+            
+            # check that average volume per minute candle is < 5000
+            if stock.totalVolumeBeforeTrading/numberMinutesElapsed < 5000:
+                return True 
+            else:
+                return False
 
     
     def OnMinuteCandle(self, sender, bar):
@@ -168,6 +184,10 @@ class OpeningRangeBreakout(QCAlgorithm):
         
         # stock is the Stock object
         stock = self.equities[str(bar.Symbol)]
+        
+        if self.isLowVolume(bar, stock) == False:
+            self.Debug("Stock is too high volume")
+            self.resetVariables(stock)
         
         self.printMinuteCandleOHLC(bar)
         
@@ -179,6 +199,8 @@ class OpeningRangeBreakout(QCAlgorithm):
           
         elif stock.isMarketOpen:
             self.findPreTradingConditions(bar, stock)
+            # if it is the start of a new day or the stock is a falling knife, reset variables in the stock 
+            
             
     
     def getPremarketLow(self, bar, stock):
@@ -196,12 +218,16 @@ class OpeningRangeBreakout(QCAlgorithm):
         if (self.Time.hour == 9 and self.Time.minute == 31):
             if stock.isMultipleDayPlay == False:
                 stock.isMarketOpen = True
+                
+                # save the 9.30AM time 
+                self.currentMarketStartTime = self.Time - timedelta(minutes = 1)
 
    
     def findPreTradingConditions(self, bar, stock):
         ''' 
         function description: finds the conditions necessary to execute the trading process
         '''
+        
         
         # Finds when the premarketLow has been broken.
         if bar.Low < stock.premarketLow and stock.isAfterPremarketLowCracked == False:
@@ -292,6 +318,9 @@ class OpeningRangeBreakout(QCAlgorithm):
         else:
             stock.isMultipleDayPlay = False
             
+    
+        
+            
     def resetVariables(self, stock):
         '''
         function description: resets all variables of the stock object if it is the end of the day
@@ -303,6 +332,7 @@ class OpeningRangeBreakout(QCAlgorithm):
             
             stock.maxPriceBeforeTrading = 0
             stock.minPriceBeforeTrading = 300000
+            stock.totalVolumeBeforeTrading = 0
             
             stock.premarketLow = 300000
             stock.premarketCrackedTime = None
@@ -336,6 +366,7 @@ class Stock:
         
         self.maxPriceBeforeTrading = 0
         self.minPriceBeforeTrading = 300000
+        self.totalVolumeBeforeTrading = 0
         
         self.isMarketOpen = False
         self.premarketLow = 300000
