@@ -9,7 +9,7 @@ class OpeningRangeBreakout(QCAlgorithm):
   
         # can also be converted into a dict
 
-        self.equities = {'SPY':Stock('SPY'), 'ATHX':Stock('ATHX'), 'SNAP':Stock('SNAP'), 'FB':Stock('FB'), 'ENPH':Stock('ENPH'), 'JBL':Stock('JBL'), 'JBL':Stock('JBL'), 'KO':Stock('KO')}
+        self.equities = {'SPY':Stock('SPY')}#, 'ATHX':Stock('ATHX'), 'SNAP':Stock('SNAP'), 'FB':Stock('FB'), 'ENPH':Stock('ENPH'), 'JBL':Stock('JBL'), 'JBL':Stock('JBL'), 'KO':Stock('KO')}
         '''
         self.equities = {"NIO":Stock('NIO'), "SRNE":Stock('SRNE'), "PLUG":Stock('PLUG'), "NETE":Stock('NETE'), "TSLA":Stock('TSLA'), "CBAT":Stock('CBAT'), "GME":Stock("GME")
         
@@ -71,12 +71,7 @@ class OpeningRangeBreakout(QCAlgorithm):
            # decodedSymbol = self.Symbol(stockName).Value
             
             self.atrDict[stockName] = self.ATR(stockName, 14, MovingAverageType.Simple, Resolution.Daily)
-            
-            
-            
-
-        
-            
+            #self.RegisterIndicator(stockName, self.atrDict[stockName], timedelta(days = 1))
 
             # zero transaction fees 
             self.Securities[stockName].FeeModel = ConstantFeeModel(0)
@@ -95,31 +90,51 @@ class OpeningRangeBreakout(QCAlgorithm):
             # this call adds our 1 minute consolidator to
             # the manager to receive updates from the engine
             self.SubscriptionManager.AddConsolidator(stockName, minuteConsolidator)
+            
+            
+            
+            
+            # define our 1 minute trade bar consolidator. we can
+            # access the 1 minute bar from the DataConsolidated events
+            dailyConsolidator = TradeBarConsolidator(timedelta(days = 1))
+    
+            # attach our event handler. the event handler is a function that will
+            # be called each time we produce a new consolidated piece of data.
+            dailyConsolidator.DataConsolidated += self.OnDailyCandle
+    
+            # this call adds our 1 minute consolidator to
+            # the manager to receive updates from the engine
+            self.SubscriptionManager.AddConsolidator(stockName, dailyConsolidator)
+            
+            
+      
         
         self.SetWarmUp(14, Resolution.Daily)
         
         
         
-
+    def OnDailyCandle(self, sender, bar):
+        stock = self.equities[str(bar.Symbol)]
         
+        
+        self.atrDict[stock.symbol].Update(bar)
+        # check if the indicator is ready
+        if self.atrDict[stock.symbol].IsReady:
+            atrValue = self.atrDict[stock.symbol].Current.Value
+            self.Debug(atrValue)
+            self.Debug("The Above is the ATR Value")
+            self.Debug(stock.symbol)
+            self.Debug("The Above is the stock the atr val above is for")
     
     def OnData(self, data):
         '''
         function description: Any trading code in here will be at the "second" level (time is in seconds)
         '''
-        
-        
-        
-        
-        
+
         
         for stockName in self.equities:
             
-            
-            
-            
-            
-            
+
             # stock is the Stock object 
             stock = self.equities[str(stockName)]
             
@@ -260,17 +275,7 @@ class OpeningRangeBreakout(QCAlgorithm):
         
         
         # update the indicator value with the new input close price every day
-        
-        self.atrDict[stock.symbol].Update(bar)
-        # check if the indicator is ready
-        if self.atrDict[stock.symbol].IsReady:
-            # get the current RSI value
-            atrValue = self.atrDict[stock.symbol].Current.Value
-            self.Debug(atrValue)
-            self.Debug("The Above is the ATR Value")
-            self.Debug(stock.symbol)
-            self.Debug("The Above is the stock the atr val above is for")
-        
+
         
         
         if self.isLowVolume(bar, stock) == False:
