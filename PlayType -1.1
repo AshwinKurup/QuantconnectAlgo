@@ -9,23 +9,8 @@ class OpeningRangeBreakout(QCAlgorithm):
   
         # can also be converted into a dict
 
-        #self.equities = {'GNUS':Stock('GNUS')}
-        
-        #self.equities = {"SRNE":Stock('SRNE'), "PLUG":Stock('PLUG'), "TSLA":Stock('TSLA'), "GME":Stock("GME")
-        #                , "ABIO":Stock("ABIO"), "SGBX":Stock("SGBX"), "AIM":Stock("AIM"), "GNUS":Stock("GNUS")
-        #                , "ALT": Stock("ALT"), "FLDM":Stock("FLDM")}
-        #self.equities = {"NIO":Stock('NIO'), "SRNE":Stock('SRNE'), "PLUG":Stock('PLUG'), "NETE":Stock('NETE'), "TSLA":Stock('TSLA'), "CBAT":Stock('CBAT'), "GME":Stock("GME")
-        #                , "SPI":Stock("SPI"), "ABIO":Stock("ABIO"), "SGBX":Stock("SGBX"), "POLA":Stock("POLA"), "AIM":Stock("AIM"), "GNUS":Stock("GNUS")
-        #                , "ALT": Stock("ALT"), "NCTY":Stock("NCTY"), "FLDM":Stock("FLDM")}
+        self.equities = {'SPY':Stock('SPY'), 'ATHX':Stock('ATHX'), 'SNAP':Stock('SNAP'), 'FB':Stock('FB'), 'ENPH':Stock('ENPH'), 'JBL':Stock('JBL'), 'JBL':Stock('JBL'), 'KO':Stock('KO')}
         '''
-        self.equities = {"NIO":Stock('NIO'), "LI":Stock('LI'), "XPEV":Stock('XPEV'), "BLNK":Stock('BLNK'), "ANPC":Stock('ANPC'), "MTC":Stock('MTC'), "NKLA":Stock("NKLA")
-        
-                        , "SPI":Stock("SPI"), "SOLO":Stock("SOLO"), "KNDI":Stock("KNDI"), "DNK":Stock("DNK"), "CBAT":Stock("CBAT"), "SCKT":Stock("SCKT")
-                        
-                        , "BA": Stock("BA"), "MRNA":Stock("MRNA")}
-      
-        '''
-        
         self.equities = {"NIO":Stock('NIO'), "SRNE":Stock('SRNE'), "PLUG":Stock('PLUG'), "NETE":Stock('NETE'), "TSLA":Stock('TSLA'), "CBAT":Stock('CBAT'), "GME":Stock("GME")
         
                         , "SPI":Stock("SPI"), "ABIO":Stock("ABIO"), "SGBX":Stock("SGBX"), "POLA":Stock("POLA"), "AIM":Stock("AIM"), "GNUS":Stock("GNUS")
@@ -52,7 +37,7 @@ class OpeningRangeBreakout(QCAlgorithm):
                         
                         , "JE":Stock("JE"), "OPTT":Stock("OPTT"), "GME":Stock("GME"), "KTOS":Stock("KTOS")
         }
-        
+        '''
         
         self.counter = 0
         
@@ -71,16 +56,28 @@ class OpeningRangeBreakout(QCAlgorithm):
         # investing 1000 dollars for each stock 
         self.cashToInvestPerStock = 1000
             
-        self.SetStartDate(2020, 12, 1)  
-        self.SetEndDate(2020, 12, 25)  
+        self.SetStartDate(2020, 12, 30)  
+        self.SetEndDate(2020, 12, 31)  
         self.SetCash(25000)
         self.UniverseSettings.ExtendedMarketHours = True
+        
+        self.atrDict = {}
         
         for stockName in self.equities:
             
             # stockName and self.equities[stockName].symbol are the same stock's name/symbol
             self.AddEquity(stockName, Resolution.Second, Market.USA, True, 0, True)
             
+           # decodedSymbol = self.Symbol(stockName).Value
+            
+            self.atrDict[stockName] = self.ATR(stockName, 14, MovingAverageType.Simple, Resolution.Daily)
+            
+            
+            
+
+        
+            
+
             # zero transaction fees 
             self.Securities[stockName].FeeModel = ConstantFeeModel(0)
             
@@ -99,12 +96,29 @@ class OpeningRangeBreakout(QCAlgorithm):
             # the manager to receive updates from the engine
             self.SubscriptionManager.AddConsolidator(stockName, minuteConsolidator)
         
+        self.SetWarmUp(14, Resolution.Daily)
         
+        
+        
+
+        
+    
     def OnData(self, data):
         '''
         function description: Any trading code in here will be at the "second" level (time is in seconds)
         '''
+        
+        
+        
+        
+        
+        
         for stockName in self.equities:
+            
+            
+            
+            
+            
             
             # stock is the Stock object 
             stock = self.equities[str(stockName)]
@@ -118,8 +132,6 @@ class OpeningRangeBreakout(QCAlgorithm):
 
                 # send the buy order if you haven't already
                 if stock.isBuyOrderSent == False: 
-                    self.Debug(stock.symbol)
-                    self.Debug("currently buying the above stock")
                     stock.buyTicket = self.LimitOrder(stock.symbol, stock.size, stock.buyPrice) 
                     stock.isBuyOrderSent = True
 
@@ -188,13 +200,16 @@ class OpeningRangeBreakout(QCAlgorithm):
                 elif stock.isSellForLossOrderSent == False and stock.isSellForWinOrderSent == False:
                     stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, "WIN")
                     stock.isSellForWinOrderSent = True
+                    
+                    
+    
 
     def isFallingKnife(self, stock):
         '''
         function description: if the stock falls >=0.6% before I even start trading when the 
         market is open, returns True
         '''
-        if stock.triggerBuyDecisionMinute == False and stock.isMarketOpen and self.enableFallingKnifeMod:
+        if stock.triggerBuyDecisionMinute == False and stock.isMarketOpen:# and self.isAfter1130():
             if self.Securities[stock.symbol].High > stock.maxPriceBeforeTrading :
                 stock.maxPriceBeforeTrading = self.Securities[stock.symbol].High
             
@@ -206,6 +221,18 @@ class OpeningRangeBreakout(QCAlgorithm):
                 return True 
             else:
                 return False
+                
+    def isAfter1130(self):
+        if self.Time.hour > 11 or self.Time.hour < 3:
+            if self.Time.hour == 11:
+                if self.Time.minute > 30:
+                    return True
+                else:
+                    return False
+            else:
+                return True    
+        else:
+            return False
         
     def isLowVolume(self, bar, stock):
         '''
@@ -230,6 +257,21 @@ class OpeningRangeBreakout(QCAlgorithm):
         
         # stock is the Stock object
         stock = self.equities[str(bar.Symbol)]
+        
+        
+        # update the indicator value with the new input close price every day
+        
+        self.atrDict[stock.symbol].Update(bar)
+        # check if the indicator is ready
+        if self.atrDict[stock.symbol].IsReady:
+            # get the current RSI value
+            atrValue = self.atrDict[stock.symbol].Current.Value
+            self.Debug(atrValue)
+            self.Debug("The Above is the ATR Value")
+            self.Debug(stock.symbol)
+            self.Debug("The Above is the stock the atr val above is for")
+        
+        
         
         if self.isLowVolume(bar, stock) == False:
             self.Debug("Stock is too high volume")
@@ -256,6 +298,8 @@ class OpeningRangeBreakout(QCAlgorithm):
     def isFirstOneMinCandleRed(self, bar, stock):
         if bar.Time.hour == 9 and bar.Time.minute == 30 and bar.Close < bar.Open and self.enableNoFirstRedCandleMod:
             return True 
+        else:
+            return False
             
     def decideIfMarketShouldBeSetOpen(self, bar, stock):
         '''
@@ -264,7 +308,7 @@ class OpeningRangeBreakout(QCAlgorithm):
         market will only be considered open from 9.31 onwards, since in the OnMinuteCandle function, we want to start
         reading only from the 9.30 candle onwards.
         '''
-        if (self.Time.hour == 9 and self.Time.minute == 31) and self.isFirstOneMinCandleRed(bar, stock):
+        if (self.Time.hour == 9 and self.Time.minute == 31): #and self.isFirstOneMinCandleRed(bar, stock):
             if stock.isMultipleDayPlay == False:
                 stock.isMarketOpen = True
                 
