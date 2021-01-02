@@ -9,8 +9,8 @@ class OpeningRangeBreakout(QCAlgorithm):
   
         # can also be converted into a dict
 
-        self.equities = {'SPY':Stock('SPY')}#, 'ATHX':Stock('ATHX'), 'SNAP':Stock('SNAP'), 'FB':Stock('FB'), 'ENPH':Stock('ENPH'), 'JBL':Stock('JBL'), 'JBL':Stock('JBL'), 'KO':Stock('KO')}
-        '''
+        #self.equities = {'AAPL':Stock('AAPL'), 'ATHX':Stock('ATHX'), 'SNAP':Stock('SNAP'), 'FB':Stock('FB'), 'JBL':Stock('JBL'), 'JBL':Stock('JBL'), 'KO':Stock('KO')}
+        
         self.equities = {"NIO":Stock('NIO'), "SRNE":Stock('SRNE'), "PLUG":Stock('PLUG'), "NETE":Stock('NETE'), "TSLA":Stock('TSLA'), "CBAT":Stock('CBAT'), "GME":Stock("GME")
         
                         , "SPI":Stock("SPI"), "ABIO":Stock("ABIO"), "SGBX":Stock("SGBX"), "POLA":Stock("POLA"), "AIM":Stock("AIM"), "GNUS":Stock("GNUS")
@@ -37,7 +37,7 @@ class OpeningRangeBreakout(QCAlgorithm):
                         
                         , "JE":Stock("JE"), "OPTT":Stock("OPTT"), "GME":Stock("GME"), "KTOS":Stock("KTOS")
         }
-        '''
+        
         
         self.counter = 0
         
@@ -56,8 +56,8 @@ class OpeningRangeBreakout(QCAlgorithm):
         # investing 1000 dollars for each stock 
         self.cashToInvestPerStock = 1000
             
-        self.SetStartDate(2020, 12, 30)  
-        self.SetEndDate(2020, 12, 31)  
+        self.SetStartDate(2020, 1, 1)  
+        self.SetEndDate(2020, 12, 30)  
         self.SetCash(25000)
         self.UniverseSettings.ExtendedMarketHours = True
         
@@ -71,8 +71,6 @@ class OpeningRangeBreakout(QCAlgorithm):
            # decodedSymbol = self.Symbol(stockName).Value
             
             self.atrDict[stockName] = self.ATR(stockName, 14, MovingAverageType.Simple, Resolution.Daily)
-            #self.RegisterIndicator(stockName, self.atrDict[stockName], timedelta(days = 1))
-
             # zero transaction fees 
             self.Securities[stockName].FeeModel = ConstantFeeModel(0)
             
@@ -93,7 +91,7 @@ class OpeningRangeBreakout(QCAlgorithm):
             
             
             
-            
+        
             # define our 1 minute trade bar consolidator. we can
             # access the 1 minute bar from the DataConsolidated events
             dailyConsolidator = TradeBarConsolidator(timedelta(days = 1))
@@ -114,17 +112,23 @@ class OpeningRangeBreakout(QCAlgorithm):
         
         
     def OnDailyCandle(self, sender, bar):
+        '''stock = self.equities[str(bar.Symbol)]
+        if self.Securities[stock.symbol].Exchange.DateTimeIsOpen(self.Time):
+        ''' 
         stock = self.equities[str(bar.Symbol)]
-        
-        
         self.atrDict[stock.symbol].Update(bar)
         # check if the indicator is ready
         if self.atrDict[stock.symbol].IsReady:
             atrValue = self.atrDict[stock.symbol].Current.Value
+            stock.atr = self.atrDict[stock.symbol].Current.Value 
             self.Debug(atrValue)
             self.Debug("The Above is the ATR Value")
             self.Debug(stock.symbol)
             self.Debug("The Above is the stock the atr val above is for")
+            self.Debug(str(self.Time))
+            self.Debug("The Above is the TIME")
+            
+            
     
     def OnData(self, data):
         '''
@@ -142,8 +146,8 @@ class OpeningRangeBreakout(QCAlgorithm):
             if (self.Time.hour == 4 and self.Time.minute == 0 and self.Time.second == 1) or self.isFallingKnife(stock):
                 self.resetVariables(stock)
             
-            # if it's time to buy 
-            if stock.triggerBuyDecisionMinute and self.Time < (stock.postBuyDecisionMinute): 
+            # if it's time to buy and the stock.atr/stock.buyPrice is less than 6%, preventing me on risking on any wild stocks 
+            if stock.triggerBuyDecisionMinute and self.Time < (stock.postBuyDecisionMinute) and (stock.atr/stock.buyPrice) < 0.06: 
 
                 # send the buy order if you haven't already
                 if stock.isBuyOrderSent == False: 
@@ -184,19 +188,20 @@ class OpeningRangeBreakout(QCAlgorithm):
         else:
           
             # if the price has dipped more than or equal to 6%, prep the sellForLoss order
-
-            if (self.Securities[stock.symbol].Price - stock.buyPrice)/stock.buyPrice <= -0.06:
+            stock.maxRisk = stock.atr/stock.buyPrice
+            if (self.Securities[stock.symbol].Price - stock.buyPrice)/stock.buyPrice <= -(stock.maxRisk + 0.001):
 
                 if stock.isSellForWinOrderSent and stock.isSellForLossOrderSent == False:
                     cancelSellForWinOrder = stock.sellForWinTicket.Cancel()
-
+                    combinedString = "LOSS " + str(stock.atr*100/stock.buyPrice)
                     # send the sell for loss order
-                    stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, "LOSS")
+                    stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, combinedString)
                     stock.isSellForLossOrderSent = True
                     stock.isSellForWinOrderSent = False
       
                 elif stock.isSellForWinOrderSent == False and stock.isSellForLossOrderSent == False:
-                    stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, "LOSS")
+                    combinedString = "LOSS " + str(stock.atr*100/stock.buyPrice)
+                    stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, combinedString)
                     stock.isSellForLossOrderSent = True
                 
             # else, the price is not low enough to warrant sending a sell for loss order
@@ -206,14 +211,16 @@ class OpeningRangeBreakout(QCAlgorithm):
                 # if the sell for loss order has been sent already, cancel the 
                 # sell for loss order first 
                 if stock.isSellForLossOrderSent and stock.isSellForWinOrderSent == False:
+                    combinedString = "WIN " + str(stock.atr*100/stock.buyPrice)
                     cancelSellForLossOrder = stock.sellForLossTicket.Cancel()
-                    stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, "WIN")
+                    stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, combinedString)
                     stock.isSellForLossOrderSent = False
                     stock.isSellForWinOrderSent = True 
                     
                 # elif just send the sell for win, if it hasn't been sent already    
                 elif stock.isSellForLossOrderSent == False and stock.isSellForWinOrderSent == False:
-                    stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, "WIN")
+                    combinedString = "WIN " + str(stock.atr*100/stock.buyPrice)
+                    stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, combinedString)
                     stock.isSellForWinOrderSent = True
                     
                     
@@ -431,7 +438,7 @@ class OpeningRangeBreakout(QCAlgorithm):
             stock.maxPriceBeforeTrading = 0
             stock.minPriceBeforeTrading = 300000
             stock.totalVolumeBeforeTrading = 0
-            
+            stock.maxRisk = 0
             stock.premarketLow = 300000
             stock.premarketCrackedTime = None
             stock.isAfterPremarketLowCracked = False 
@@ -466,6 +473,11 @@ class Stock:
         self.minPriceBeforeTrading = 300000
         self.totalVolumeBeforeTrading = 0
         
+        # do not reset the atr
+        self.atr = 0 
+        
+        
+        self.maxRisk = 0
         self.isMarketOpen = False
         self.premarketLow = 300000
         self.premarketCrackedTime = None
