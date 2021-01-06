@@ -1,7 +1,8 @@
 class DailyPlayType(QCAlgorithm):
 
     def Initialize(self):
-        self.SetStartDate(2020, 1, 3)  # Set Start Date
+        self.SetStartDate(2020, 11, 15)  # Set Start Date
+        self.SetEndDate(2020, 12, 31)
         self.SetCash(100000)  # Set Strategy Cash
         self.cashToInvestPerStock = 10000
         stockList = ["VVPR"]
@@ -21,20 +22,18 @@ class DailyPlayType(QCAlgorithm):
             self.Consolidate(stockName, Calendar.Weekly, self.CalendarTradeBarHandler)
 
             
-        self.SetWarmUp(50)
+        self.SetWarmUp(14)
     
     def CalendarTradeBarHandler(self, tradeBar):
-        self.Debug(str(tradeBar.Time))
+        stock = self.equities[str(tradeBar.Symbol)]
+        stock.prevWeekLow = tradeBar.Low    
+        
         
     def OnData(self, data):
         for stockName in self.equities:
-            
-            # stock is the Stock object 
             stock = self.equities[stockName]
-  
-            
-            
-            #self.findPreTradingConditions(stock)
+            self.Debug(stock.prevWeekLow)
+            self.findPreTradingConditions(stock)
     
             '''# if it's time to buy and the stock.atr/stock.buyPrice is less than 6%, preventing me on risking on any wild stocks 
             if stock.triggerBuyDecisionMinute and self.Time < (stock.postBuyDecisionMinute) and (stock.atr/stock.buyPrice) < 0.06: 
@@ -67,25 +66,26 @@ class DailyPlayType(QCAlgorithm):
         ''' 
         function description: finds the conditions necessary to execute the trading process
         '''
-        
+
         if self.Securities[stock.symbol].Low < stock.prevWeekLow:
-                # self.Debug("11111")
-                # self.Debug("1 day ish ago we had the prevWeekLow as")
-                # self.Debug(stock.prevWeekLow)
-                # self.Debug("the prevweekLow was cracked 1 day ish ago")
-                # self.Debug(str(self.Time))
-                # self.Debug("11111")
+                self.Debug("vvvvvvvvvvvvvvvvvvvvvvvvv")
+                self.Debug(str(self.Time))
+                self.Debug("On the previous candle to above time prevWeekLow is broken")
+                self.Debug(stock.prevWeekLow)
+                self.Debug("the above is the prevweekLow that was broken")
+                self.Debug("vvvvvvvvvvvvvvvvvvvvvvvvv")
                 stock.isAfterPrevWeekLowCracked = True
                 
         # if there is a redsprout, set the trading variables
         elif stock.isAfterPrevWeekLowCracked and stock.isAfterRedSprout == False:
             if self.Securities[stock.symbol].High > stock.prevWeekLow:
                 if self.Securities[stock.symbol].Close < self.Securities[stock.symbol].Open:
-                    # self.Debug("===============")
-                    # self.Debug("1 day ish ago we had a redsprout, since we're referencing the previous so called bar")
-                    # self.Debug(str(self.Time))
-                    # self.Debug(stock.symbol)
-                    # self.Debug("===============")
+                    stock.isAfterRedSprout = True
+                    self.Debug("===============")
+                    self.Debug("1 day ago we had a redsprout, since we're referencing the previous so called bar")
+                    self.Debug(str(self.Time))
+                    self.Debug(stock.symbol)
+                    self.Debug("===============")
                     self.setTradingVariables(stock)
         
         
