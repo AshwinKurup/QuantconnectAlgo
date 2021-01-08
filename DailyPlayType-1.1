@@ -1,11 +1,11 @@
 class DailyPlayType(QCAlgorithm):
 
     def Initialize(self):
-        self.SetStartDate(2020, 11, 15)  # Set Start Date
-        self.SetEndDate(2020, 12, 31)
-        self.SetCash(100000)  # Set Strategy Cash
-        self.cashToInvestPerStock = 10000
-        stockList = ["VVPR"]
+        self.SetStartDate(2015, 10, 3)  # Set Start Date
+        self.SetEndDate(2020, 12,  21)
+        self.SetCash(8000)  # Set Strategy Cash
+        self.cashToInvestPerStock = 1000
+        stockList = ["TTNP", 'ACET', 'LUB', 'NIO', 'NETE', 'NURO', 'AMPE', 'PEIX', 'OMI', 'TATT', 'SYPR', 'AAPL', 'SPY', 'PPSI', 'CRMD', 'ONTX', 'PLL',  'NCTY', 'ALT', 'LLLI', 'NWBO', 'GNUS', 'ABIO', 'BDR', 'FB', 'LOGC', 'PENN', 'SRNE', 'MOV', 'CLNY', 'NTN',  'CREG', 'ATHX', 'ADXS', 'CPSH', 'DSGT', 'AIM', 'POLA', 'SOL', 'SGBX', 'CBAT', 'KLDO', 'CAN', 'FLDM', 'MNOV', 'BBI', 'NKE', 'PIC',  'SUNW', 'SPI', 'JE', 'GME']
         # Rolling Windows to hold bar close data keyed by symbol
         self.equities={}
         #self.closingData = {}
@@ -17,57 +17,142 @@ class DailyPlayType(QCAlgorithm):
         
         for stockName in self.equities:
             self.AddEquity(stockName, Resolution.Daily, Market.USA, True, 0, True)
-            
+            #self.Securities[stockName].SetDataNormalizationMode(DataNormalizationMode.Raw)
             # API convenience method for easily receiving weekly-consolidated data
             self.Consolidate(stockName, Calendar.Weekly, self.CalendarTradeBarHandler)
 
             
-        self.SetWarmUp(14)
+        self.SetWarmUp(7)
     
     def CalendarTradeBarHandler(self, tradeBar):
-        stock = self.equities[str(tradeBar.Symbol)]
-        stock.prevWeekLow = tradeBar.Low    
-        
+        if not self.IsWarmingUp and self.IsMarketOpen:
+            stock = self.equities[str(tradeBar.Symbol)]
+            self.Debug("A new week be starting now")
+            self.Debug(str(self.Time))
+            self.resetVariables(stock)
+            stock.prevWeekLow = tradeBar.Low    
+            
         
     def OnData(self, data):
-        for stockName in self.equities:
-            stock = self.equities[stockName]
-            self.Debug(stock.prevWeekLow)
-            self.findPreTradingConditions(stock)
-    
-            '''# if it's time to buy and the stock.atr/stock.buyPrice is less than 6%, preventing me on risking on any wild stocks 
-            if stock.triggerBuyDecisionMinute and self.Time < (stock.postBuyDecisionMinute) and (stock.atr/stock.buyPrice) < 0.06: 
-
-                # send the buy order if you haven't already
-                if stock.isBuyOrderSent == False: 
-                    stock.buyTicket = self.LimitOrder(stock.symbol, stock.size, stock.buyPrice) 
-                    stock.isBuyOrderSent = True
-
+        
+        
+        try:
+            for stockName in self.equities:
+                stock = self.equities[stockName]
+                self.Debug(stock.prevWeekLow)
+                self.Debug("the above is the prevWeekLow")
                 
-                # if the buy order is already filled and it's still buy 
-                # decision minute, still can trigger sell() method
-                elif stock.isBuyOrderFilled:
-                    self.sell(stock)
-                        
-            # if the buy order has been sent and not filled, and it's past the 
-            # buy decision minute already, cancel 
-            elif stock.isBuyOrderSent and stock.isBuyOrderFilled == False and self.Time >= (stock.postBuyDecisionMinute) and stock.isBuyOrderCancelled == False:
-                cancelBuyOrder = stock.buyTicket.Cancel()
-                stock.isBuyOrderCancelled = True
-     
-            # if the buy order is already filled, trigger sell() method
-            else:
-                if stock.isBuyOrderFilled:
-                    self.sell(stock)''' 
+                self.Debug(str(stock.triggerBuyDecisionDay))
+                #self.printCandleOHLC(self.Securities[stock.symbol])
+                
+                # don't ask me why, but monday is 4
+                # try to reset stock variables at the beginninng 
+                # of a new week
+                if self.Portfolio[stock.symbol].Invested == False and stock.triggerBuyDecisionDay == False:
+                    self.Debug("what")
+                    if (self.Time.weekday() == 5):
+                        self.Debug("this is a saturday 12am, wink wink")
+                        if stock.isBuyOrderSent and stock.isBuyOrderFilled == False and self.Time >= (stock.postBuyDecisionDay) and stock.isBuyOrderCancelled == False and stock.isMultipleWeekPlay:
+                            cancelBuyOrder = stock.buyTicket.Cancel()
+                            stock.isBuyOrderCancelled = True
+          
+                        self.resetVariables(stock)
+                        self.Debug(str(self.Time))
+                        self.Debug("At the above time, resetting")                
+                
+                self.findPreTradingConditions(stock)
+                
+                if stock.triggerBuyDecisionDay and self.Time < (stock.postBuyDecisionDay) and not self.IsWarmingUp:# and self.Time.weekday!=1: #and (stock.atr/stock.buyPrice) < 0.06: 
+    
+                    # send the buy order if you haven't already
+                    if stock.isBuyOrderSent == False: 
+                        stock.buyTicket = self.LimitOrder(stock.symbol, stock.size, stock.buyPrice) 
+                        stock.isBuyOrderSent = True
+                        self.Debug("We are sending the buy order now!")
+                        self.Debug(str(self.Time))
+    
+                    
+                    # if the buy order is already filled and it's still buy 
+                    # decision day, still can trigger sell() method
+                    elif stock.isBuyOrderFilled:
+                        self.sell(stock)
+                            
+                # if the buy order has been sent and not filled, and it's past the 
+                # buy decision day already, cancel 
+                elif stock.isBuyOrderSent and stock.isBuyOrderFilled == False and self.Time >= (stock.postBuyDecisionDay) and stock.isBuyOrderCancelled == False:
+                    cancelBuyOrder = stock.buyTicket.Cancel()
+                    stock.isBuyOrderCancelled = True
+                    self.resetVariables(stock)
+                    self.Debug("Cancelling buy order now")
+                
+                # if the buy order is already filled, trigger sell() method
+                else:
+                    if stock.isBuyOrderFilled:
+                        self.sell(stock)
+        except:
+            pass
+    def sell(self, stock):
+        ''' 
+        function description: adjusts the sell order according to the price
+        '''
+ 
+        # check if the stock has already been sold
+        if self.isStockSold(stock):
+            self.Debug(stock.symbol)
+            self.Debug("Stock has been sold, now resetting all vars")
             
+            # then reset all variables 
+            self.resetVariables(stock)
+        
+        # since the stock has not yet been sold ... 
+        else:
+          
+            # if the price has dipped more than or equal to 6%, prep the sellForLoss order
+            # stock.maxRisk = stock.atr/stock.buyPrice
+            if (self.Securities[stock.symbol].Price - stock.buyPrice)/stock.buyPrice <= -0.06: #-(stock.maxRisk + 0.001):
+
+                if stock.isSellForWinOrderSent and stock.isSellForLossOrderSent == False:
+                    cancelSellForWinOrder = stock.sellForWinTicket.Cancel()
+                    #combinedString = "LOSS " + str(stock.atr*100/stock.buyPrice)
+                    # send the sell for loss order
+                    stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, "LOSS ")
+                    stock.isSellForLossOrderSent = True
+                    stock.isSellForWinOrderSent = False
       
+                elif stock.isSellForWinOrderSent == False and stock.isSellForLossOrderSent == False:
+                    #combinedString = "LOSS " + str(stock.atr*100/stock.buyPrice)
+                    stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, "LOSS ")
+                    stock.isSellForLossOrderSent = True
+                
+            # else, the price is not low enough to warrant sending a sell for loss order
+            # i can prep the sellForWin order here
+            else:
+                
+                # if the sell for loss order has been sent already, cancel the 
+                # sell for loss order first 
+                if stock.isSellForLossOrderSent and stock.isSellForWinOrderSent == False:
+                    #combinedString = "WIN " + str(stock.atr*100/stock.buyPrice)
+                    cancelSellForLossOrder = stock.sellForLossTicket.Cancel()
+                    stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, "WIN ")
+                    stock.isSellForLossOrderSent = False
+                    stock.isSellForWinOrderSent = True 
+                    
+                # elif just send the sell for win, if it hasn't been sent already    
+                elif stock.isSellForLossOrderSent == False and stock.isSellForWinOrderSent == False:
+                    #combinedString = "WIN " + str(stock.atr*100/stock.buyPrice)
+                    stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, "WIN ")
+                    stock.isSellForWinOrderSent = True
+                    
+                    
+                    
+                    
         
     def findPreTradingConditions(self, stock):
         ''' 
         function description: finds the conditions necessary to execute the trading process
         '''
 
-        if self.Securities[stock.symbol].Low < stock.prevWeekLow:
+        if self.Securities[stock.symbol].Low < stock.prevWeekLow and not stock.isAfterPrevWeekLowCracked:
                 self.Debug("vvvvvvvvvvvvvvvvvvvvvvvvv")
                 self.Debug(str(self.Time))
                 self.Debug("On the previous candle to above time prevWeekLow is broken")
@@ -82,7 +167,7 @@ class DailyPlayType(QCAlgorithm):
                 if self.Securities[stock.symbol].Close < self.Securities[stock.symbol].Open:
                     stock.isAfterRedSprout = True
                     self.Debug("===============")
-                    self.Debug("1 day ago we had a redsprout, since we're referencing the previous so called bar")
+                    self.Debug("1 day ago we had a redsprout, since we're referencing the previous bar")
                     self.Debug(str(self.Time))
                     self.Debug(stock.symbol)
                     self.Debug("===============")
@@ -91,39 +176,95 @@ class DailyPlayType(QCAlgorithm):
         
     def setTradingVariables(self, stock):
         ''' 
-        function description: sets variables relevant to the buy decision minute
+        function description: sets variables relevant to the buy decision day
         and activates the OnData function.
         '''
         stock.buyPrice = self.Securities[stock.symbol].Low
         stock.sellForWinPrice = self.Securities[stock.symbol].High
         stock.sellForLossPrice = stock.buyPrice * 0.94
         stock.isAfterRedSprout = True
-        # decide the size
+        stock.triggerBuyDecisionDay = True
+        stock.postBuyDecisionDay = self.Time + timedelta(days = 1)
         stock.size = int(self.cashToInvestPerStock/stock.buyPrice)
-        # self.Debug("==========================================")
-        # self.Debug("These are the buyPrice, sellForWinPrice respectively")
-        # self.Debug(stock.buyPrice)
-        # self.Debug(stock.sellForWinPrice)
-        # self.Debug("==========================================")
+        self.Debug("==========================================")
+        self.Debug("Below is postBuyDec day")
+        self.Debug(str(stock.postBuyDecisionDay))
+        self.Debug("==========================================")
         
+    def OnOrderEvent(self, orderEvent):
+        '''
+        function description: finds whether the buy order is filled 
+        '''
+        for stockName in self.equities:
+            
+            # stock is the Stock object
+            stock = self.equities[stockName]
+            
+            # check if the stock exists in the portfolio, that means it has been bought already
+            # it must also not be a multiple day play for that stock, since I don't want the stock
+            # to be bought again accidentally on the second day
+            if self.Portfolio[stock.symbol].Invested and stock.isMultipleWeekPlay == False:
+                self.lastOrderEvent = orderEvent
+                stock.isBuyOrderFilled = True
+                self.Debug(str(self.Time))
+                self.Debug("The time above is when isBuyOrderFilled is set to True")
+                
+                
+    def isStockSold(self, stock):
+        '''
+        function descriptions: checks if the stock has been successfully sold
+        '''
         
-                    
+        if stock.isBuyOrderFilled and self.Portfolio[stock.symbol].Invested == False:
+            return True    
+            
+            
+    def askIsMultipleWeekPlay(self, stock):
+        '''
+        function description: if the stock is not sold on the first day, this function
+        ensures some variables are not reset, allowing the stock to be held over the following days,
+        via the isMultipleWeekPlay boolean flag
+        ''' 
+      
+        if self.Portfolio[stock.symbol].Invested:
+            stock.isMultipleWeekPlay = True
+        else:
+            stock.isMultipleWeekPlay = False
+            
+    def printCandleOHLC(self, bar):
+        '''
+        function description: prints out the Open High Low and Close for a candle at a specified time 
+        in bar.Time.hour and bar.Time.minute below give the EXACT hour and minute for the
+        minute candle you wish to investigate.
+        '''
+        # if bar.Time.month == 7 and bar.Time.day == 10:
+        self.Debug(str(self.Time))
+        self.Debug("The Above is ONE DAY ABOVE the exact timeBar the OHLC refers to ")
+        self.Debug(bar.Open)
+        self.Debug("Above is the Open")
+        self.Debug(bar.High)
+        self.Debug("Above is the High")
+        self.Debug(bar.Low)
+        self.Debug("Above is the Low")
+        self.Debug(bar.Close)
+        self.Debug("Above is the Close")        
+            
     def resetVariables(self, stock):
         '''
         function description: resets all variables of the stock object if it is the end of the day
         if it is a multiple day play, no variables are reset
         '''
-        self.askIsMultipleDayPlay(stock)
-        if stock.isMultipleDayPlay == False:
+        self.askIsMultipleWeekPlay(stock)
+        if stock.isMultipleWeekPlay == False:
             stock.isMarketOpen = False
+            
             
             stock.maxPriceBeforeTrading = 0
             stock.minPriceBeforeTrading = 300000
             stock.totalVolumeBeforeTrading = 0
             stock.maxRisk = 0
             stock.prevWeekLow = 300000
-
-            stock.isAfterAfterPrevWeekLowCracked = False 
+            stock.isAfterPrevWeekLowCracked = False 
             stock.isAfterRedSprout = False
             stock.buyPrice = 0
             stock.sellForWinPrice = 0 
@@ -184,5 +325,5 @@ class Stock:
         self.isBuyOrderCancelled = False
         
         # used to decide if the play should extend over multiple days 
-        self.isMultipleDayPlay = False
+        self.isMultipleWeekPlay = False
         # end of variables setting
