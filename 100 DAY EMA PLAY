@@ -1,14 +1,15 @@
 class HundredDayEMADipBuyer(QCAlgorithm):
 
     def Initialize(self):
-        self.SetStartDate(2020, 10, 3) 
+        self.SetStartDate(2020, 1, 3) 
         self.SetEndDate(2020, 12,  21)
         self.SetCash(8000000)  
         self.cashToInvestPerStock = 1000
-        stockList = ["VVPR", 'ACET', 'LUB', 'NIO', 'NETE', 'NURO', 'AMPE', 'PEIX', 'OMI', 'TATT', 'SYPR', 'AAPL', 'SPY', 'PPSI', 'CRMD', 'ONTX', 'PLL',  'NCTY', 'ALT', 'LLLI', 'NWBO', 'GNUS', 'ABIO', 'BDR', 'FB', 'LOGC', 'PENN', 'SRNE', 'MOV', 'CLNY', 'NTN',  'CREG', 'ATHX', 'ADXS', 'CPSH', 'DSGT', 'AIM', 'POLA', 'SOL', 'SGBX', 'CBAT', 'KLDO', 'CAN', 'FLDM', 'MNOV', 'BBI', 'NKE', 'PIC',  'SUNW', 'SPI', 'JE', 'GME']
+        stockList = ["VVPR", 'LUB', 'NIO', 'NETE', 'NURO', 'AMPE', 'PEIX', 'OMI', 'TATT', 'SYPR', 'AAPL', 'SPY', 'PPSI', 'CRMD', 'ONTX', 'PLL',  'NCTY', 'ALT', 'LLLI', 'NWBO', 'GNUS', 'ABIO', 'BDR', 'FB', 'LOGC', 'PENN', 'SRNE', 'MOV', 'CLNY', 'NTN',  'CREG', 'ATHX', 'ADXS', 'CPSH', 'DSGT', 'AIM', 'POLA', 'SOL', 'SGBX', 'CBAT', 'KLDO', 'FLDM', 'MNOV', 'BBI', 'NKE',  'SUNW', 'SPI', 'JE', 'GME']
         self.equities={}
         self.emaHundredDict = {}
         self.emaNineDict={}
+        self.momentumDict = {}
         # add all stocks into self.equities    
         for stockName in stockList:
             self.equities[stockName] = Stock(stockName)
@@ -27,6 +28,7 @@ class HundredDayEMADipBuyer(QCAlgorithm):
             
             self.emaHundredDict[stockName] = self.EMA(stockName, 100, Resolution.Daily)
             self.emaNineDict[stockName] = self.EMA(stockName, 9, Resolution.Daily)
+            self.momentumDict[stockName] = self.ATR(stockName, 9, Resolution.Daily)
             
         self.SetWarmUp(101)
 
@@ -43,63 +45,67 @@ class HundredDayEMADipBuyer(QCAlgorithm):
                 # then reset all variables 
                 self.resetVariables(stock)
             
-            if self.emaHundredDict[stock.symbol].IsReady and self.emaNineDict[stock.symbol].IsReady :
-                stock.emaHundred = self.emaHundredDict[stock.symbol].Current.Value 
-                stock.emaNine= self.emaNineDict[stock.symbol].Current.Value 
-                stock.score = (stock.emaNine - stock.emaHundred)/stock.emaHundred
+            if self.emaHundredDict[stock.symbol].IsReady and self.emaNineDict[stock.symbol].IsReady and self.momentumDict[stock.symbol].IsReady:
                 
-            if not self.IsWarmingUp:
-                self.Debug(stock.emaHundred)
-                # if the stock is not in portfolio, try to buy
-                if not self.Portfolio[stock.symbol].Invested:
-                    #self.Debug(str((self.Securities[stock.symbol].Price - stock.ema)/self.Securities[stock.symbol].Price))
-                    # if there's a <1% gap between the ema and the stock, buy if haven't already bought
-                    if stock.score > 0 and (self.Securities[stock.symbol].Price - stock.emaHundred)/self.Securities[stock.symbol].Price > -0.01 and (self.Securities[stock.symbol].Price - stock.emaHundred)/self.Securities[stock.symbol].Price <= 0 and not stock.isBuyOrderSent:
-                        stock.buyPrice = stock.emaHundred
-                        stock.sellForWinPrice = stock.emaHundred*1.1
-                        stock.size = int(self.cashToInvestPerStock/self.Securities[stock.symbol].Price) * stock.score
-                        stock.buyTicket = self.LimitOrder(stock.symbol, stock.size, stock.emaHundred)
-                        stock.isBuyOrderSent = True
+                if not self.IsWarmingUp:
                     
-                    
-                
-                # if the stock is in portfolio, try to sell 
-                else:
-                    
-                    # sell for loss if there's a 2% diff between the 100 day ema and stock price
-                    if (self.Securities[stock.symbol].Price - stock.emaHundred)/self.Securities[stock.symbol].Price <= -0.02:
-        
-                        if stock.isSellForWinOrderSent and stock.isSellForLossOrderSent == False:
-                            cancelSellForWinOrder = stock.sellForWinTicket.Cancel()
-                            combinedString = "LOSS " 
-                            # send the sell for loss order
-                            stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, combinedString)
-                            stock.isSellForLossOrderSent = True
-                            stock.isSellForWinOrderSent = False
-              
-                        elif stock.isSellForWinOrderSent == False and stock.isSellForLossOrderSent == False:
-                            combinedString = "LOSS "
-                            stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, combinedString)
-                            stock.isSellForLossOrderSent = True
+    
+                    # if the stock is not in portfolio, try to buy
+                    if not self.Portfolio[stock.symbol].Invested:
+                        stock.emaHundred = self.emaHundredDict[stock.symbol].Current.Value 
+                        stock.emaNine= self.emaNineDict[stock.symbol].Current.Value 
                         
+                        stock.momentum = abs(self.momentumDict[stock.symbol].Current.Value)
+                        stock.score = ((stock.emaNine - stock.emaHundred)/stock.emaHundred) - (stock.momentum/stock.emaNine)*10
 
-                    # i can prep the sellForWin order here
-                    elif self.Securities[stock.symbol].Price >= stock.sellForWinPrice:
-                        
-                        # if the sell for loss order has been sent already, cancel the 
-                        # sell for loss order first 
-                        if stock.isSellForLossOrderSent and stock.isSellForWinOrderSent == False:
-                            combinedString = "WIN "
-                            cancelSellForLossOrder = stock.sellForLossTicket.Cancel()
-                            stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, combinedString)
-                            stock.isSellForLossOrderSent = False
-                            stock.isSellForWinOrderSent = True 
+                        if stock.score > 0 and (self.Securities[stock.symbol].Price - stock.emaHundred)/self.Securities[stock.symbol].Price > -0.01 and (self.Securities[stock.symbol].Price - stock.emaHundred)/self.Securities[stock.symbol].Price <= 0 and not stock.isBuyOrderSent:
+                            stock.buyPrice = stock.emaHundred
+                            stock.sellForWinPrice = stock.emaHundred*1.1
+                            stock.size = int(self.cashToInvestPerStock/self.Securities[stock.symbol].Price) * stock.score
+                            stock.buyTicket = self.LimitOrder(stock.symbol, stock.size, stock.emaHundred)
+                            stock.isBuyOrderSent = True
                             
-                        # elif just send the sell for win, if it hasn't been sent already    
-                        elif stock.isSellForLossOrderSent == False and stock.isSellForWinOrderSent == False:
-                            combinedString = "WIN " 
-                            stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, combinedString)
-                            stock.isSellForWinOrderSent = True
+                            
+                                    
+                        
+                    
+                    # if the stock is in portfolio, try to sell 
+                    else:
+                        
+                        # sell for loss if difference between buy price and current price is equal to stock momentum
+                        if stock.buyPrice - self.Securities[stock.symbol].Price >= stock.momentum :
+            
+                            if stock.isSellForWinOrderSent and stock.isSellForLossOrderSent == False:
+                                cancelSellForWinOrder = stock.sellForWinTicket.Cancel()
+                                combinedString = "LOSS " 
+                                # send the sell for loss order
+                                stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, combinedString)
+                                stock.isSellForLossOrderSent = True
+                                stock.isSellForWinOrderSent = False
+                  
+                            elif stock.isSellForWinOrderSent == False and stock.isSellForLossOrderSent == False:
+                                combinedString = "LOSS "
+                                stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, combinedString)
+                                stock.isSellForLossOrderSent = True
+                            
+    
+                        # i can prep the sellForWin order here
+                        elif self.Securities[stock.symbol].Price >= stock.sellForWinPrice:
+                            
+                            # if the sell for loss order has been sent already, cancel the 
+                            # sell for loss order first 
+                            if stock.isSellForLossOrderSent and stock.isSellForWinOrderSent == False:
+                                combinedString = "WIN "
+                                cancelSellForLossOrder = stock.sellForLossTicket.Cancel()
+                                stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, combinedString)
+                                stock.isSellForLossOrderSent = False
+                                stock.isSellForWinOrderSent = True 
+                                
+                            # elif just send the sell for win, if it hasn't been sent already    
+                            elif stock.isSellForLossOrderSent == False and stock.isSellForWinOrderSent == False:
+                                combinedString = "WIN " 
+                                stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, combinedString)
+                                stock.isSellForWinOrderSent = True
                 
     def isStockSold(self, stock):
         '''
@@ -176,10 +182,10 @@ class Stock:
         self.minPriceBeforeTrading = 300000
         self.totalVolumeBeforeTrading = 0
         
-        # do not reset the atr
+        # do not reset the atr or momentum
         self.emaHundred = 0 
         self.emaNine = 0 
-        
+        self.momentum = 0
         self.maxRisk = 0
         self.isMarketOpen = False
         self.prevWeekLow = 300000
