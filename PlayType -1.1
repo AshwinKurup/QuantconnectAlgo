@@ -8,7 +8,7 @@ class OpeningRangeBreakout(QCAlgorithm):
 
         self.equities = {}
         
-        '''stockList  = ['CTRM', 'CFMS', 'WKHS', 'ALT', 'RWLK', 'CFMS', 'YRIV', 'VTVT', 'SINT', 'NBY', 'CTRV', 'JAGX'] 
+        '''stockList  = ['AMWL', 'AQB', 'ASAN', 'BNTX', 'CCJ', 'DMYD', 'GIK', 'GTEC', 'HCAC', 'IPOB', 'IPV', 'KODK', 'MFGP', 'MP', 'NGA', 'PSTH', 'QELL', 'SAMA', 'SBE', 'SPCE', 'TRNE', 'VGAC', 'VTRS', 'YALA']
         for stockName in stockList:
             self.Debug(stockName)
             self.Debug('roptint')
@@ -16,9 +16,9 @@ class OpeningRangeBreakout(QCAlgorithm):
 
         #self.equities = {'AAPL':Stock('AAPL'), 'ATHX':Stock('ATHX'), 'SNAP':Stock('SNAP'), 'FB':Stock('FB'), 'JBL':Stock('JBL'), 'JBL':Stock('JBL'), 'KO':Stock('KO')}
         
-        self.equities = {"NIO":Stock('NIO'), "SRNE":Stock('SRNE'), "PLUG":Stock('PLUG'), "NETE":Stock('NETE'), "TSLA":Stock('TSLA'), "CBAT":Stock('CBAT')}#, "GME":Stock("GME")
+        self.equities = {"NIO":Stock('NIO'), "SRNE":Stock('SRNE'), "PLUG":Stock('PLUG'), "NETE":Stock('NETE'), "TSLA":Stock('TSLA'), "CBAT":Stock('CBAT'), "GME":Stock("GME")
         
-        '''    , "SPI":Stock("SPI"), "ABIO":Stock("ABIO"), "SGBX":Stock("SGBX"), "POLA":Stock("POLA"), "AIM":Stock("AIM"), "GNUS":Stock("GNUS")
+                        , "SPI":Stock("SPI"), "ABIO":Stock("ABIO"), "SGBX":Stock("SGBX"), "POLA":Stock("POLA"), "AIM":Stock("AIM"), "GNUS":Stock("GNUS")
                         
                         , "ALT": Stock("ALT"), "NCTY":Stock("NCTY"), "FLDM":Stock("FLDM"), "TTNP":Stock("TTNP"), "ACET":Stock("ACET")
                     
@@ -41,7 +41,7 @@ class OpeningRangeBreakout(QCAlgorithm):
                         ,"MNOV": Stock("MNOV"), "BBI":Stock("BBI"), "NKE":Stock("NKE"), "PIC":Stock("PIC"), "SUNW":Stock("SUNW")
                         
                         , "JE":Stock("JE"), "OPTT":Stock("OPTT"), "GME":Stock("GME"), "KTOS":Stock("KTOS")
-        }'''
+        }
         
         
         self.counter = 0
@@ -67,43 +67,60 @@ class OpeningRangeBreakout(QCAlgorithm):
         self.UniverseSettings.ExtendedMarketHours = True
         
         self.atrDict = {}
-        self.atrMinuteDict = {}
-        self.momentumDict = {}
+        
         for stockName in self.equities:
             
             # stockName and self.equities[stockName].symbol are the same stock's name/symbol
             self.AddEquity(stockName, Resolution.Second, Market.USA, True, 0, True)
             
-            # adjust for stock splits and dividends
-            self.Securities[stockName].SetDataNormalizationMode(DataNormalizationMode.Raw);
+            #self.Securities[stockName].SetDataNormalizationMode(DataNormalizationMode.Raw);
             
-            # daily atr
             self.atrDict[stockName] = self.ATR(stockName, 14, MovingAverageType.Simple, Resolution.Daily)
-            
-            # minutely atr and momentum 
-            self.atrMinuteDict[stockName] = self.ATR(stockName, 14, MovingAverageType.Simple, Resolution.Daily)
-            self.momentumDict[stockName] = self.MOM(stockName, 12, Resolution.Minute)
-            
-            # ensure zero transaction fees 
+            # zero transaction fees 
             self.Securities[stockName].FeeModel = ConstantFeeModel(0)
             
             # to be used in investigating whether the buy order has been filled
             self.lastOrderEvent = None 
             
-            # used in finding PM low and pre-trading conditions
+            # define our 1 minute trade bar consolidator. we can
+            # access the 1 minute bar from the DataConsolidated events
             minuteConsolidator = TradeBarConsolidator(timedelta(minutes=1))
+    
+            # attach our event handler. the event handler is a function that will
+            # be called each time we produce a new consolidated piece of data.
             minuteConsolidator.DataConsolidated += self.OnMinuteCandle
+    
+            # this call adds our 1 minute consolidator to
+            # the manager to receive updates from the engine
             self.SubscriptionManager.AddConsolidator(stockName, minuteConsolidator)
             
-            # used in finding atr   
+            
+            
+        
+            # define our 1 minute trade bar consolidator. we can
+            # access the 1 minute bar from the DataConsolidated events
             dailyConsolidator = TradeBarConsolidator(timedelta(days = 1))
+    
+            # attach our event handler. the event handler is a function that will
+            # be called each time we produce a new consolidated piece of data.
             dailyConsolidator.DataConsolidated += self.OnDailyCandle
+    
+            # this call adds our 1 minute consolidator to
+            # the manager to receive updates from the engine
             self.SubscriptionManager.AddConsolidator(stockName, dailyConsolidator)
             
             
-            # used in finding atr and momentum 
+            
+            # define our 1 minute trade bar consolidator. we can
+            # access the 1 minute bar from the DataConsolidated events
             fiveMinuteConsolidator = TradeBarConsolidator(timedelta(minutes = 5))
+    
+            # attach our event handler. the event handler is a function that will
+            # be called each time we produce a new consolidated piece of data.
             fiveMinuteConsolidator.DataConsolidated += self.OnFiveMinuteCandle
+    
+            # this call adds our 1 minute consolidator to
+            # the manager to receive updates from the engine
             self.SubscriptionManager.AddConsolidator(stockName, fiveMinuteConsolidator)
             
             self.tradeBarWindow = RollingWindow[TradeBar](5)
@@ -114,36 +131,20 @@ class OpeningRangeBreakout(QCAlgorithm):
     
     
     def OnFiveMinuteCandle(self, sender, bar):
-        
+        pass
+        '''
         stock = self.equities[str(bar.Symbol)]
-        
-        
-        '''if stock.isMarketOpen and stock.triggerBuyDecisionMinute and (self.Time - stock.buyDecisionMinute).total_seconds() > 300:
-            
-            numberOfBlocksOfMinutesElapsed = (self.Time - stock.buyDecisionMinute).total_seconds() / 300.0
-            
+        if stock.isMarketOpen and self.isAfter945():
             stock.sumFiveMinBarHeight = stock.sumFiveMinBarHeight + self.getBarHeight(bar)
-            averageFiveMinBarHeight = stock.sumFiveMinBarHeight/numberOfBlocksOfMinutesElapsed 
-            self.Debug("==============================")
-            self.Debug(str(self.Time))
-            self.Debug("This is av five min bar height")
-            self.Debug(averageFiveMinBarHeight)
-            self.Debug("==============================")
-            if self.getBarHeight(bar) > averageFiveMinBarHeight:
-                self.Debug("==============================")
-                self.Debug(str(self.Time))
-                self.Debug("We are at a critical period in history, for it might be a large momentum rise")
-                self.Debug(str(self.getBarHeight(bar)/averageFiveMinBarHeight))
-                self.Debug("The above is the height ratio of currBarHeight to Av.Height")
-                self.Debug("==============================")
-                '''
+            timeElapsedInMinutes = (self.Time - stock.buyDecisionMinute).minutes
+            averageFiveMinBarHeight = stock.sumFiveMinBarHeight/timeElapsedInMinutes 
+        '''
             
     def getBarHeight(self, bar):
         '''
         function description: close - open preferred to high - low 
         '''
-        # issue is that this can be negative sometimes mate
-        return abs(bar.Close - bar.Open)
+        return bar.Close - bar.Open
         
     def OnDailyCandle(self, sender, bar):
         '''stock = self.equities[str(bar.Symbol)]
@@ -168,96 +169,110 @@ class OpeningRangeBreakout(QCAlgorithm):
         '''
         function description: Any trading code in here will be at the "second" level (time is in seconds)
         '''
-
         
-        for stockName in self.equities:
-            
-
-            # stock is the Stock object 
-            stock = self.equities[str(stockName)]
-            
-            # if it is the start of a new day or the stock is a falling knife, reset variables in the stock 
-            if (self.Time.hour == 4 and self.Time.minute == 0 and self.Time.second == 1) or self.isFallingKnife(stock):
-                self.resetVariables(stock)
-            
-            # if it's time to buy and the stock.atr/stock.buyPrice is less than 6%, preventing me on risking on any wild stocks 
-            if stock.triggerBuyDecisionMinute and self.Time < (stock.postBuyDecisionMinute) and (stock.atr/stock.buyPrice) < 0.06:# and self.isAfter945(): 
-
-                # send the buy order if you haven't already
-                if stock.isBuyOrderSent == False: 
-                    stock.buyTicket = self.LimitOrder(stock.symbol, stock.size, stock.buyPrice) 
-                    stock.isBuyOrderSent = True
-
+        # catch errors from ticker symbols not being found
+        try:
+        
+            for stockName in self.equities:
                 
-                # if the buy order is already filled and it's still buy 
-                # decision minute, still can trigger sell() method
-                elif stock.isBuyOrderFilled:
-                    self.sell(stock)
-                        
-            # if the buy order has been sent and not filled, and it's past the 
-            # buy decision minute already, cancel 
-            elif stock.isBuyOrderSent and stock.isBuyOrderFilled == False and self.Time >= (stock.postBuyDecisionMinute) and stock.isBuyOrderCancelled == False:
-                cancelBuyOrder = stock.buyTicket.Cancel()
-                stock.isBuyOrderCancelled = True
-     
-            # if the buy order is already filled, trigger sell() method
-            else:
-                if stock.isBuyOrderFilled:
-                    self.sell(stock)        
-     
+    
+                # stock is the Stock object 
+                stock = self.equities[str(stockName)]
+                
+                # if it is the start of a new day or the stock is a falling knife, reset variables in the stock 
+                if (self.Time.hour == 4 and self.Time.minute == 0 and self.Time.second == 1) or self.isFallingKnife(stock):
+                    self.resetVariables(stock)
+                
+                # if it's time to buy and the stock.atr/stock.buyPrice is less than 6%, preventing me on risking on any wild stocks 
+                if stock.triggerBuyDecisionMinute and self.Time < (stock.postBuyDecisionMinute): #and self.isAfter945(): 
+    
+                    # send the buy order if you haven't already
+                    if stock.isBuyOrderSent == False: 
+                        stock.buyTicket = self.LimitOrder(stock.symbol, stock.size, stock.buyPrice) 
+                        stock.isBuyOrderSent = True
+    
+                    
+                    # if the buy order is already filled and it's still buy 
+                    # decision minute, still can trigger sell() method
+                    elif stock.isBuyOrderFilled:
+                        self.sell(stock)
+                            
+                # if the buy order has been sent and not filled, and it's past the 
+                # buy decision minute already, cancel 
+                elif stock.isBuyOrderSent and stock.isBuyOrderFilled == False and self.Time >= (stock.postBuyDecisionMinute) and stock.isBuyOrderCancelled == False:
+                    
+                    # catch errors regarding cancelling orders that have already been executed
+                    try:
+                        cancelBuyOrder = stock.buyTicket.Cancel()
+                        stock.isBuyOrderCancelled = True
+                    except:
+                        pass
+         
+                # if the buy order is already filled, trigger sell() method
+                else:
+                    if stock.isBuyOrderFilled:
+                        self.sell(stock)        
+        except:
+            self.Debug("=========")
+            self.Debug(stock.symbol)
+            self.Debug("Okay probably the above stock isn't in database")
+            self.Debug("=========")
             
     def sell(self, stock):
         ''' 
         function description: adjusts the sell order according to the price
         '''
- 
-        # check if the stock has already been sold
-        if self.isStockSold(stock):
-            self.Debug(stock.symbol)
-            self.Debug("Stock has been sold, now resetting all vars")
-            # then reset all variables 
-            self.resetVariables(stock)
         
-        # since the stock has not yet been sold ... 
-        else:
-          
-            # if the price has dipped more than or equal to 6%, prep the sellForLoss order
-            stock.maxRisk = stock.atr/stock.buyPrice
-            if (self.Securities[stock.symbol].Price - stock.buyPrice)/stock.buyPrice <= -(stock.maxRisk + 0.001):
-
-                if stock.isSellForWinOrderSent and stock.isSellForLossOrderSent == False:
-                    cancelSellForWinOrder = stock.sellForWinTicket.Cancel()
-                    combinedString = "LOSS " + str(stock.noise)
-                    # send the sell for loss order
-                    stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, combinedString)
-                    stock.isSellForLossOrderSent = True
-                    stock.isSellForWinOrderSent = False
-      
-                elif stock.isSellForWinOrderSent == False and stock.isSellForLossOrderSent == False:
-                    combinedString = "LOSS " + str(stock.noise)
-                    stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, combinedString)
-                    stock.isSellForLossOrderSent = True
-                
-            # else, the price is not low enough to warrant sending a sell for loss order
-            # i can prep the sellForWin order here
+        # catch errors regarding cancelling orders that have already been executed
+        try:
+            # check if the stock has already been sold
+            if self.isStockSold(stock):
+                self.Debug(stock.symbol)
+                self.Debug("Stock has been sold, now resetting all vars")
+                # then reset all variables 
+                self.resetVariables(stock)
+            
+            # since the stock has not yet been sold ... 
             else:
-                
-                # if the sell for loss order has been sent already, cancel the 
-                # sell for loss order first 
-                if stock.isSellForLossOrderSent and stock.isSellForWinOrderSent == False:
-                    combinedString = "WIN " + str(stock.noise)
-                    cancelSellForLossOrder = stock.sellForLossTicket.Cancel()
-                    stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, combinedString)
-                    stock.isSellForLossOrderSent = False
-                    stock.isSellForWinOrderSent = True 
+              
+                # if the price has dipped more than or equal to 6%, prep the sellForLoss order
+                stock.maxRisk = stock.atr/stock.buyPrice
+                if (self.Securities[stock.symbol].Price - stock.buyPrice)/stock.buyPrice <= -(stock.maxRisk + 0.001):
+    
+                    if stock.isSellForWinOrderSent and stock.isSellForLossOrderSent == False:
+                        cancelSellForWinOrder = stock.sellForWinTicket.Cancel()
+                        combinedString = "LOSS " + str(stock.atr*100/stock.buyPrice)
+                        # send the sell for loss order
+                        stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, combinedString)
+                        stock.isSellForLossOrderSent = True
+                        stock.isSellForWinOrderSent = False
+          
+                    elif stock.isSellForWinOrderSent == False and stock.isSellForLossOrderSent == False:
+                        combinedString = "LOSS " + str(stock.atr*100/stock.buyPrice)
+                        stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, combinedString)
+                        stock.isSellForLossOrderSent = True
                     
-                # elif just send the sell for win, if it hasn't been sent already    
-                elif stock.isSellForLossOrderSent == False and stock.isSellForWinOrderSent == False:
-                    combinedString = "WIN " + str(stock.noise)
-                    stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, combinedString)
-                    stock.isSellForWinOrderSent = True
+                # else, the price is not low enough to warrant sending a sell for loss order
+                # i can prep the sellForWin order here
+                else:
                     
+                    # if the sell for loss order has been sent already, cancel the 
+                    # sell for loss order first 
+                    if stock.isSellForLossOrderSent and stock.isSellForWinOrderSent == False:
+                        combinedString = "WIN " + str(stock.atr*100/stock.buyPrice)
+                        cancelSellForLossOrder = stock.sellForLossTicket.Cancel()
+                        stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, combinedString)
+                        stock.isSellForLossOrderSent = False
+                        stock.isSellForWinOrderSent = True 
+                        
+                    # elif just send the sell for win, if it hasn't been sent already    
+                    elif stock.isSellForLossOrderSent == False and stock.isSellForWinOrderSent == False:
+                        combinedString = "WIN " + str(stock.atr*100/stock.buyPrice)
+                        stock.sellForWinTicket = self.LimitOrder(stock.symbol, -(stock.size), stock.sellForWinPrice, combinedString)
+                        stock.isSellForWinOrderSent = True
                     
+        except:
+            pass
     
 
     def isFallingKnife(self, stock):
@@ -315,29 +330,27 @@ class OpeningRangeBreakout(QCAlgorithm):
         stock = self.equities[str(bar.Symbol)]
         
         
-        self.atrMinuteDict[stock.symbol].Update(bar)
-        self.momentumDict[stock.symbol].Update(bar)
+        # update the indicator value with the new input close price every day
 
-        if self.atrMinuteDict[stock.symbol].IsReady and self.momentumDict[stock.symbol].IsReady:
-            stock.noise = self.atrMinuteDict[stock.symbol].Current.Value/self.momentumDict[stock.symbol].Current.Value  
-
-            
-        '''if self.isLowVolume(bar, stock) == False:
-            self.Debug("Stock is too high volume")
-            self.resetVariables(stock)
-        '''
-        self.printMinuteCandleOHLC(bar)
         
-        # decide to open the market for the stock or not
-        self.decideIfMarketShouldBeSetOpen(bar, stock)
-        
-        if stock.isMarketOpen == False: 
-            self.getPremarketLow(bar, stock)
-          
-        elif stock.isMarketOpen:
-            self.findPreTradingConditions(bar, stock)
-            # if it is the start of a new day or the stock is a falling knife, reset variables in the stock 
+        try:
+            if self.isLowVolume(bar, stock) == False:
+                self.Debug("Stock is too high volume")
+                self.resetVariables(stock)
             
+            self.printMinuteCandleOHLC(bar)
+            
+            # decide to open the market for the stock or not
+            self.decideIfMarketShouldBeSetOpen(bar, stock)
+            
+            if stock.isMarketOpen == False: 
+                self.getPremarketLow(bar, stock)
+              
+            elif stock.isMarketOpen:
+                self.findPreTradingConditions(bar, stock)
+                # if it is the start of a new day or the stock is a falling knife, reset variables in the stock 
+        except:
+            pass
             
     
     def getPremarketLow(self, bar, stock):
@@ -406,29 +419,33 @@ class OpeningRangeBreakout(QCAlgorithm):
         '''
         function descriptions: checks if the stock has been successfully sold
         '''
-        
-        if stock.isBuyOrderFilled and self.Portfolio[stock.symbol].Invested == False:
-            return True 
- 
+        # catch errors from ticker symbols not being found
+        try:
+            if stock.isBuyOrderFilled and self.Portfolio[stock.symbol].Invested == False:
+                return True 
+        except:
+            pass
      
     def OnOrderEvent(self, orderEvent):
         '''
         function description: finds whether the buy order is filled 
         '''
-        for stockName in self.equities:
-            
-            # stock is the Stock object
-            stock = self.equities[stockName]
-            
-            # check if the stock exists in the portfolio, that means it has been bought already
-            # it must also not be a multiple day play for that stock, since I don't want the stock
-            # to be bought again accidentally on the second day
-            if self.Portfolio[stock.symbol].Invested and stock.isMultipleDayPlay == False:
-                self.lastOrderEvent = orderEvent
-                stock.isBuyOrderFilled = True
-                self.Debug(str(self.Time))
-                self.Debug("The time above is when isBuyOrderFilled is set to True")
-
+        try:
+            for stockName in self.equities:
+                
+                # stock is the Stock object
+                stock = self.equities[stockName]
+                
+                # check if the stock exists in the portfolio, that means it has been bought already
+                # it must also not be a multiple day play for that stock, since I don't want the stock
+                # to be bought again accidentally on the second day
+                if self.Portfolio[stock.symbol].Invested and stock.isMultipleDayPlay == False:
+                    self.lastOrderEvent = orderEvent
+                    stock.isBuyOrderFilled = True
+                    self.Debug(str(self.Time))
+                    self.Debug("The time above is when isBuyOrderFilled is set to True")
+        except:
+            pass
             
     def printMinuteCandleOHLC(self, bar):
         '''
@@ -480,7 +497,6 @@ class OpeningRangeBreakout(QCAlgorithm):
             stock.premarketCrackedTime = None
             stock.isAfterPremarketLowCracked = False 
             stock.isAfterRedSprout = False
-            stock.noise = 0
             stock.buyPrice = 0
             stock.sellForWinPrice = 0 
             stock.sellForLossPrice = 0 # irrelevant 
@@ -515,8 +531,6 @@ class Stock:
         self.atr = 0 
         
         self.sumFiveMinBarHeight = 0 
-        
-        self.noise = 0
 
         self.maxRisk = 0
         self.isMarketOpen = False
