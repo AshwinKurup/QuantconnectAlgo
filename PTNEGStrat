@@ -110,7 +110,7 @@ class HundredDayEMADipBuyer(QCAlgorithm):
         stock.prevWeekLow = 300000
         stock.isAfterPrevWeekLowCracked = False 
         stock.isAfterRedSprout = False
-        stock.buyPrice = 0
+        stock.buyPrice = 0 
         stock.sellForWinPrice = 0 
         stock.sellForLossPrice = 0 # irrelevant 
         stock.buyDecisionDay = None
