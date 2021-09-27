@@ -9,77 +9,52 @@ class HundredDayEMADipBuyer(QCAlgorithm):
         self.equities={}
         self.emaHundredDict = {}
         self.emaNineDict={}
-        self.momentumDict = {}
-        # add all stocks into self.equities    
-        for stockName in stockList:
+        self.momentumDict = {}  
+        for stockName in stockList: # add all stocks into self.equities  
             self.equities[stockName] = Stock(stockName)
         
         for stockName in self.equities:
             self.AddEquity(stockName, Resolution.Daily, Market.USA, True, 0, True)
-            #self.Securities[stockName].SetDataNormalizationMode(DataNormalizationMode.Raw)
-            
-            # # API convenience method for easily receiving weekly-consolidated data
-            # self.Consolidate(stockName, Calendar.Weekly, self.CalendarTradeBarHandler)
-            
             self.Securities[stockName].FeeModel = ConstantFeeModel(0)
-            
-            # to be used in investigating whether the buy order has been filled
-            self.lastOrderEvent = None 
-            
+            self.lastOrderEvent = None  # to be used in investigating whether the buy order has been filled
             self.emaHundredDict[stockName] = self.EMA(stockName, 100, Resolution.Daily)
             self.emaNineDict[stockName] = self.EMA(stockName, 9, Resolution.Daily)
             self.momentumDict[stockName] = self.ATR(stockName, 9, Resolution.Daily)
-            
+           
         self.SetWarmUp(101)
 
 
     def OnData(self, data):
         for stockName in self.equities:
             stock = self.equities[stockName]
-            
-            # check if the stock has already been sold
-            if self.isStockSold(stock):
+            if self.isStockSold(stock): # check if the stock has already been sold
                 self.Debug(stock.symbol)
-                self.Debug("Stock has been sold, now resetting all vars")
-                
-                # then reset all variables 
-                self.resetVariables(stock)
+                self.Debug("Stock has been sold, now resetting all vars") 
+                self.resetVariables(stock) # then reset all variables 
             
             if self.emaHundredDict[stock.symbol].IsReady and self.emaNineDict[stock.symbol].IsReady and self.momentumDict[stock.symbol].IsReady:
                 
                 if not self.IsWarmingUp:
-                    
-    
-                    # if the stock is not in portfolio, try to buy
-                    if not self.Portfolio[stock.symbol].Invested:
+                    if not self.Portfolio[stock.symbol].Invested: # if the stock is not in portfolio, try to buy
                         stock.emaHundred = self.emaHundredDict[stock.symbol].Current.Value 
                         stock.emaNine= self.emaNineDict[stock.symbol].Current.Value 
-                        
                         stock.momentum = abs(self.momentumDict[stock.symbol].Current.Value)
                         stock.score = ((stock.emaNine - stock.emaHundred)/stock.emaHundred) - (stock.momentum/stock.emaNine)*10
-
                         if stock.score > 0 and (self.Securities[stock.symbol].Price - stock.emaHundred)/self.Securities[stock.symbol].Price > -0.01 and (self.Securities[stock.symbol].Price - stock.emaHundred)/self.Securities[stock.symbol].Price <= 0 and not stock.isBuyOrderSent:
                             stock.buyPrice = stock.emaHundred
                             stock.sellForWinPrice = stock.emaHundred*1.1
                             stock.size = int(self.cashToInvestPerStock/self.Securities[stock.symbol].Price) * stock.score
                             stock.buyTicket = self.LimitOrder(stock.symbol, stock.size, stock.emaHundred)
                             stock.isBuyOrderSent = True
-                            
-                            
-                                    
-                        
-                    
+
                     # if the stock is in portfolio, try to sell 
                     else:
                         
-                        # sell for loss if difference between buy price and current price is equal to stock momentum
                         if stock.buyPrice - self.Securities[stock.symbol].Price >= stock.momentum :
-            
                             if stock.isSellForWinOrderSent and stock.isSellForLossOrderSent == False:
                                 cancelSellForWinOrder = stock.sellForWinTicket.Cancel()
                                 combinedString = "LOSS " 
-                                # send the sell for loss order
-                                stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, combinedString)
+                                stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, combinedString) # send the sell for loss order
                                 stock.isSellForLossOrderSent = True
                                 stock.isSellForWinOrderSent = False
                   
@@ -88,12 +63,7 @@ class HundredDayEMADipBuyer(QCAlgorithm):
                                 stock.sellForLossTicket = self.LimitOrder(stock.symbol, -(stock.size), self.Securities[stock.symbol].Price, combinedString)
                                 stock.isSellForLossOrderSent = True
                             
-    
-                        # i can prep the sellForWin order here
                         elif self.Securities[stock.symbol].Price >= stock.sellForWinPrice:
-                            
-                            # if the sell for loss order has been sent already, cancel the 
-                            # sell for loss order first 
                             if stock.isSellForLossOrderSent and stock.isSellForWinOrderSent == False:
                                 combinedString = "WIN "
                                 cancelSellForLossOrder = stock.sellForLossTicket.Cancel()
@@ -111,7 +81,6 @@ class HundredDayEMADipBuyer(QCAlgorithm):
         '''
         function descriptions: checks if the stock has been successfully sold
         '''
-        
         if stock.isBuyOrderFilled and self.Portfolio[stock.symbol].Invested == False:
             return True 
             
@@ -121,13 +90,7 @@ class HundredDayEMADipBuyer(QCAlgorithm):
         function description: finds whether the buy order is filled 
         '''
         for stockName in self.equities:
-            
-            # stock is the Stock object
-            stock = self.equities[stockName]
-            
-            # check if the stock exists in the portfolio, that means it has been bought already
-            # it must also not be a multiple day play for that stock, since I don't want the stock
-            # to be bought again accidentally on the second day
+            stock = self.equities[stockName] # stock is the Stock object
             if self.Portfolio[stock.symbol].Invested:
                 self.lastOrderEvent = orderEvent
                 stock.isBuyOrderFilled = True
@@ -139,12 +102,7 @@ class HundredDayEMADipBuyer(QCAlgorithm):
         '''
         function description: resets all variables of the stock object if it is the end of the day
         if it is a multiple day play, no variables are reset
-        '''
-        # self.askIsMultipleWeekPlay(stock)
-        # if stock.isMultipleWeekPlay == False:
-        #     stock.isMarketOpen = False
-            
-            
+        '''  
         stock.maxPriceBeforeTrading = 0
         stock.minPriceBeforeTrading = 300000
         stock.totalVolumeBeforeTrading = 0
@@ -177,12 +135,9 @@ class HundredDayEMADipBuyer(QCAlgorithm):
 class Stock:
     def __init__(self,symbol):
         self.symbol = symbol
-        
         self.maxPriceBeforeTrading = 0
         self.minPriceBeforeTrading = 300000
         self.totalVolumeBeforeTrading = 0
-        
-        # do not reset the atr or momentum
         self.emaHundred = 0 
         self.emaNine = 0 
         self.momentum = 0
@@ -209,7 +164,5 @@ class Stock:
         self.size = 0
         self.triggerBuyDecisionDay = False
         self.isBuyOrderCancelled = False
-        
-        # used to decide if the play should extend over multiple days 
         self.isMultipleWeekPlay = False
-        # end of variables setting
+
